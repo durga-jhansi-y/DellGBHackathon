@@ -25,11 +25,19 @@ const datasetCatalog = [
 ];
 let datasetTab = 'installed';
 const datasetTimers = new Map();
+let currentView = 'map';
+let pendingSyncCount = 2;
+let lastSyncLabel = 'Nov 12, 2026';
+let syncBusy = false;
 
 function renderDatasets() {
   const installed = datasetCatalog.filter((dataset) => dataset.state !== 'available');
   const available = datasetCatalog.filter((dataset) => dataset.state === 'available');
   const rows = datasetTab === 'installed' ? installed : available;
+  const isOnline = document.body.dataset.networkMode === 'online';
+  const syncState = syncBusy ? 'syncing' : pendingSyncCount === 0 ? 'complete' : isOnline ? 'online' : 'waiting';
+  const syncMessage = syncBusy ? 'Syncing queued updates…' : pendingSyncCount === 0 ? `Everything is up to date · last sync ${lastSyncLabel}` : isOnline ? `${pendingSyncCount} queued updates ready · last sync ${lastSyncLabel}` : `${pendingSyncCount} queued updates waiting · last sync ${lastSyncLabel}`;
+  const syncAction = syncBusy ? 'Syncing…' : pendingSyncCount === 0 ? 'Up to date' : isOnline ? 'Sync now' : 'Waiting for connection';
   const card = (dataset) => {
     const stateLabel = { ready: dataset.active ? 'Active · verified' : 'Ready offline', downloading: 'Downloading', paused: 'Paused', verifying: 'Verifying package', failed: 'Download failed', available: 'Available' }[dataset.state];
     const actions = dataset.state === 'available'
@@ -47,9 +55,17 @@ function renderDatasets() {
     const verify = dataset.state === 'verifying' ? `<div class="phase-row verify-phase"><div><strong>Verify package</strong><span>${dataset.verification}% · checking signature and tile hashes</span></div><div class="phase-track"><i style="width:${dataset.verification}%"></i></div></div>` : '';
     return `<article class="dataset-card" data-state="${dataset.state}"><div class="dataset-art"><span>OFFLINE REGION</span><b>▧</b><i class="art-contour"></i><i class="art-contour second"></i></div><div class="dataset-card-main"><div class="dataset-card-top"><div><h3>${dataset.name}</h3><p>${dataset.region} <span>·</span> ${dataset.kind}</p></div><span class="dataset-state ${dataset.state}"><i></i>${stateLabel}</span></div><div class="dataset-meta"><span><small>CAPTURE</small>${dataset.capture}</span><span><small>PACKAGE</small>${dataset.size}</span><span><small>GENERATION</small><code>${dataset.generation}</code></span><span><small>PUBLISHER</small>${dataset.publisher}</span></div>${progress}${verify}<div class="dataset-card-actions">${actions}</div></div></article>`;
   };
-  $('#secondary-view').innerHTML = `<div class="dataset-page-intro"><div><span class="eyebrow">OFFLINE LIBRARY · SAMPLE CATALOG</span><h2>Maps for the field</h2><p>Download a region before you lose connection. A package is ready only after verification finishes.</p></div><div class="storage-meter"><span>DEVICE STORAGE</span><strong>12.8 <small>of 20 GB</small></strong><div><i></i></div></div></div><div class="dataset-tabs" role="tablist"><button class="dataset-tab ${datasetTab === 'installed' ? 'active' : ''}" data-tab="installed" role="tab" aria-selected="${datasetTab === 'installed'}">Installed <b>${installed.length}</b></button><button class="dataset-tab ${datasetTab === 'available' ? 'active' : ''}" data-tab="available" role="tab" aria-selected="${datasetTab === 'available'}">Available <b>${available.length}</b></button><span class="catalog-note"><i></i> Sample data · sync not connected</span></div><div class="dataset-card-list">${rows.length ? rows.map(card).join('') : '<div class="dataset-empty">No maps in this list yet.</div>'}</div>`;
+  $('#secondary-view').innerHTML = `<div class="dataset-page-intro"><div><span class="eyebrow">OFFLINE LIBRARY · SAMPLE CATALOG</span><h2>Maps for the field</h2><p>Download a region before you lose connection. A package is ready only after verification finishes.</p></div><div class="storage-meter"><span>DEVICE STORAGE</span><strong>12.8 <small>of 20 GB</small></strong><div><i></i></div></div></div>
+    <div class="sync-card ${syncState}"><span class="sync-icon">${syncBusy ? '↻' : pendingSyncCount === 0 ? '✓' : '⇧'}</span><div class="sync-copy"><strong>${pendingSyncCount ? `${pendingSyncCount} pending updates` : 'Sync status'}</strong><span>${syncMessage} · prototype queue</span></div><button class="button ${isOnline && pendingSyncCount ? 'button-primary' : 'button-secondary'}" data-action="sync" ${!isOnline || pendingSyncCount === 0 || syncBusy ? 'disabled' : ''}>${syncAction}</button></div>
+    <div class="dataset-tabs" role="tablist"><button class="dataset-tab ${datasetTab === 'installed' ? 'active' : ''}" data-tab="installed" role="tab" aria-selected="${datasetTab === 'installed'}">Installed <b>${installed.length}</b></button><button class="dataset-tab ${datasetTab === 'available' ? 'active' : ''}" data-tab="available" role="tab" aria-selected="${datasetTab === 'available'}">Available <b>${available.length}</b></button><span class="catalog-note"><i></i> Sample data · sync not connected</span></div><div class="dataset-card-list">${rows.length ? rows.map(card).join('') : '<div class="dataset-empty">No maps in this list yet.</div>'}</div>`;
   $('#secondary-view').querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => { datasetTab = button.dataset.tab; renderDatasets(); }));
-  $('#secondary-view').querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => handleDatasetAction(button.dataset.action, button.dataset.id)));
+  $('#secondary-view').querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => button.dataset.action === 'sync' ? startMockSync() : handleDatasetAction(button.dataset.action, button.dataset.id)));
+}
+
+function startMockSync() {
+  if (document.body.dataset.networkMode !== 'online' || syncBusy || pendingSyncCount === 0) return;
+  syncBusy = true; renderDatasets();
+  setTimeout(() => { pendingSyncCount = 0; syncBusy = false; lastSyncLabel = 'just now'; renderDatasets(); showToast('Sample queue synced · no live service connected'); }, 1400);
 }
 
 function handleDatasetAction(action, id) {
@@ -86,6 +102,7 @@ function handleDatasetAction(action, id) {
 }
 
 function setPage(view) {
+  currentView = view;
   const page = pages[view] || pages.map;
   document.querySelectorAll('.nav-link').forEach((button) => button.classList.toggle('active', button.dataset.view === view));
   $('#page-crumb').textContent = page.crumb;
@@ -145,6 +162,7 @@ function setNetworkMode(mode, notify = false) {
   networkModeButton.classList.toggle('online', online);
   networkModeButton.setAttribute('aria-pressed', String(online));
   $('#network-mode-label').textContent = online ? 'Online mode · demo' : 'Offline mode';
+  if (currentView === 'datasets') renderDatasets();
   if (notify) showToast(online ? 'Online mode selected · network services are not connected in this prototype' : 'Offline mode selected · using the sample local map');
 }
 setNetworkMode(localStorage.getItem('crystalGeoNetworkMode') || 'offline');
@@ -185,7 +203,8 @@ document.querySelectorAll('.map-filter').forEach((filter) => filter.addEventList
     item.classList.toggle('active', selected);
     item.setAttribute('aria-pressed', String(selected));
   });
-  const labels = { all: 'Showing all sample tiles', verified: 'Showing verified sample tiles', unverified: 'No unverified sample tiles in this sample map', failed: 'No failed tiles in this sample map' };
+  const labels = { all: 'All sample tile states shown', verified: 'Only verified base imagery shown', unverified: 'Showing the neutral unverified tile', failed: 'Showing the verification warning tile' };
+  $('#map-stage').dataset.filter = filter.dataset.filter;
   showToast(labels[filter.dataset.filter]);
 }));
 $('#select-area').addEventListener('click', () => showToast('Area selection is ready for the recognition workflow prototype'));
@@ -207,7 +226,8 @@ function showOnboardingStep() {
   $('#welcome-copy').textContent = step.copy;
   document.querySelectorAll('.step-dot').forEach((dot, index) => dot.classList.toggle('active', index === onboardingStep));
   $('.step-count').textContent = `${onboardingStep + 1} / 3`;
-  $('#welcome-next').innerHTML = onboardingStep === 2 ? 'Explore sample map <span>→</span>' : 'Continue <span>→</span>';
+  $('#welcome-next').innerHTML = onboardingStep === 2 ? 'Use sample map <span>→</span>' : 'Continue <span>→</span>';
+  $('#welcome-import').classList.toggle('hidden', onboardingStep !== 2);
 }
 function closeOnboarding() {
   localStorage.setItem('crystalGeoOnboarded', 'yes');
@@ -216,7 +236,11 @@ function closeOnboarding() {
 $('#welcome-next').addEventListener('click', () => {
   if (onboardingStep < onboarding.length - 1) { onboardingStep += 1; showOnboardingStep(); return; }
   closeOnboarding();
-  showToast('Sample map ready · offline prototype');
+  setPage('map'); showToast('Sample map ready · offline prototype');
+});
+$('#welcome-import').addEventListener('click', () => $('#package-file').click());
+$('#package-file').addEventListener('change', (event) => {
+  if (event.target.files.length) { closeOnboarding(); setPage('datasets'); showToast('Package selected · importing is not connected in this prototype'); }
 });
 $('#welcome-skip').addEventListener('click', closeOnboarding);
 if (!localStorage.getItem('crystalGeoOnboarded')) { showOnboardingStep(); firstRun.showModal(); }

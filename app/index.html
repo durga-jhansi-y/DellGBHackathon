@@ -13,6 +13,8 @@
   <link rel="stylesheet" href="network-mode.css">
   <link rel="stylesheet" href="map-controls.css">
   <link rel="stylesheet" href="datasets.css">
+  <link rel="stylesheet" href="status-tiles.css">
+  <link rel="stylesheet" href="mobile-polish.css">
   <style>.first-run-dialog{width:min(480px,calc(100vw - 30px));padding:28px 32px 21px;border:1px solid #e4e9e1;border-radius:12px}.first-run-mark{display:flex;align-items:center;gap:10px}.first-run-mark .brand-mark{width:20px;height:20px}.step-indicator{display:flex;align-items:center;gap:5px;margin-top:34px}.step-dot{width:6px;height:6px;border-radius:8px;background:#dce3da}.step-dot.active{width:19px;background:#638266}.step-count{margin-left:auto;color:#929b91;font:9px var(--mono)}.first-run-dialog h2{font:700 24px/1.2 var(--display);letter-spacing:-.8px;color:#29362b;margin:19px 0 9px}.first-run-dialog>p{font-size:11px;line-height:1.65;color:#7d887d;margin:0}.welcome-illustration{height:126px;margin:19px 0 16px;border-radius:7px;position:relative;overflow:hidden;background:linear-gradient(145deg,#e8ecdd,#d3e1d5 52%,#d5e0dc)}.welcome-contour{position:absolute;inset:20px 67px;border:1px solid #8ca78a77;border-radius:48%;transform:rotate(-19deg)}.welcome-contour.c2{inset:30px 82px}.welcome-contour.c3{inset:40px 97px}.welcome-illustration span{position:absolute;left:12px;bottom:10px;font:8px var(--mono);letter-spacing:.08em;color:#66786a}.welcome-illustration b{position:absolute;right:38%;top:40%;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#fff;color:#56805d;box-shadow:0 0 0 7px #ffffff55}.welcome-actions{display:flex;justify-content:space-between}.welcome-footnote{border-top:1px solid #edf0eb;margin-top:17px;padding-top:12px;color:#9aa196;font-size:9px;text-align:center}.welcome-actions .button-secondary{border-color:transparent;background:none;color:#859085}</style>
 </head>
 <body>
@@ -67,6 +69,10 @@
               <div class="map-pin finding-pin"><span class="finding-ring"></span><span class="finding-center">◇</span><div class="finding-label"><strong>Review finding</strong><small>Confidence 0.87</small></div></div>
               <div class="map-center-cross">+</div>
               <div class="map-watermark">CRYSTAL GEO <span>·</span> OFFLINE BASEMAP</div>
+              <div id="sample-tile-states" aria-label="Sample tile status overlays">
+                <div class="sample-tile unverified-tile" data-tile-state="unverified"><strong>Not verified</strong><small>Imagery hidden</small></div>
+                <div class="sample-tile failed-tile" data-tile-state="failed"><b>!</b><strong>Verification failed</strong><small>Tile not displayed</small></div>
+              </div>
             </div>
             <div class="map-status-legend" aria-label="Tile verification legend">
               <div class="legend-heading">TILE STATUS <button id="map-info" aria-label="About tile status" title="About tile status">ⓘ</button></div>
@@ -85,7 +91,7 @@
             <button class="location-button" id="locate-button"><span>⊙</span> My location</button>
             <div class="map-attribution">Imagery © USGS · USFS <span>·</span> Capture: Aug 2024</div>
             <div class="scale-control"><div class="scale-line"></div><span id="scale-label">2 km</span></div>
-            <div class="map-status"><span class="status-check">✓</span><span><strong>Verified imagery</strong><small>All visible tiles checked</small></span><button title="Verification details" id="verify-info">ⓘ</button></div>
+            <div class="map-status"><span class="status-check">✓</span><span><strong>Verified imagery</strong><small>Unverified tiles are hidden</small></span><button title="Verification details" id="verify-info">ⓘ</button></div>
           </div>
           <div class="map-footer"><div class="footer-left"><span class="online-indicator"></span> All map data available offline <span class="footer-separator">·</span> Last verified Nov 12, 2026</div><button id="download-area">＋ Download an area</button></div>
         </div>
@@ -104,7 +110,7 @@
   </div>
   <div class="toast" id="toast" role="status"></div>
   <dialog id="modal"><div class="modal-head"><span class="eyebrow">CRYSTAL GEO</span><button class="modal-close" id="modal-close" aria-label="Close">×</button></div><h2 id="modal-title">Dataset details</h2><div id="modal-content"></div><button class="button button-primary modal-done" id="modal-done">Done</button></dialog>
-  <dialog id="first-run" class="first-run-dialog"><div class="first-run-mark"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><span class="eyebrow">FIELD READY, OFFLINE</span></div><div class="step-indicator"><span class="step-dot active"></span><span class="step-dot"></span><span class="step-dot"></span><span class="step-count">1 / 3</span></div><h2 id="welcome-title">Maps for the moments<br>you lose connection.</h2><p id="welcome-copy">Crystal Geo keeps trusted imagery available in the field. Download a map area before you head out.</p><div class="welcome-illustration"><div class="welcome-contour c1"></div><div class="welcome-contour c2"></div><div class="welcome-contour c3"></div><span>OFFLINE MAP PACKAGE</span><b>✓</b></div><div class="welcome-actions"><button class="button button-secondary" id="welcome-skip">Skip for now</button><button class="button button-primary" id="welcome-next">Continue <span>→</span></button></div><div class="welcome-footnote">No location permission is needed to browse offline maps.</div></dialog>
+  <dialog id="first-run" class="first-run-dialog"><div class="first-run-mark"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><span class="eyebrow">FIELD READY, OFFLINE</span></div><div class="step-indicator"><span class="step-dot active"></span><span class="step-dot"></span><span class="step-dot"></span><span class="step-count">1 / 3</span></div><h2 id="welcome-title">Maps for the moments<br>you lose connection.</h2><p id="welcome-copy">Crystal Geo keeps trusted imagery available in the field. Download a map area before you head out.</p><div class="welcome-illustration"><div class="welcome-contour c1"></div><div class="welcome-contour c2"></div><div class="welcome-contour c3"></div><span>OFFLINE MAP PACKAGE</span><b>✓</b></div><div class="welcome-actions"><button class="button button-secondary" id="welcome-skip">Skip for now</button><button class="button button-secondary hidden" id="welcome-import">Import package</button><button class="button button-primary" id="welcome-next">Continue <span>→</span></button><input id="package-file" type="file" accept=".zip,.mbtiles,.cgeo" hidden></div><div class="welcome-footnote">No location permission is needed to browse offline maps.</div></dialog>
   <script src="repositories.js"></script>
   <script src="app.js"></script>
 </body>
