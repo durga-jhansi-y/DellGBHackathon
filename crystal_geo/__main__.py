@@ -27,6 +27,14 @@ def main(argv=None):
     build.add_argument('--generation-id', default=GENERATION_ID, help='unique development generation identifier')
     check = commands.add_parser('verify', help='verify a development fixture (does not authenticate its publisher)')
     check.add_argument('generation')
+    evaluate = commands.add_parser('evaluate-compression',help='build and compare raw/WebP Crystal and MBTiles development controls')
+    evaluate.add_argument('output')
+    evaluate.add_argument('--source-dir',help='local TX003 source PNG directory; hashes are mandatory')
+    evaluate.add_argument('--generation',help='reuse a verified WebP generation instead of encoding a fresh one')
+    evaluate.add_argument('--iterations',type=int,default=30)
+    evaluate.add_argument('--warmup',type=int,default=5)
+    evaluate.add_argument('--seed',type=int,default=0)
+    evaluate.add_argument('--force',action='store_true',help='replace a recognized, unchanged evaluation output')
     recognize = commands.add_parser('recognize',help='run one experimental, generation-pinned local VLM job')
     recognize.add_argument('store')
     recognize.add_argument('findings')
@@ -68,6 +76,16 @@ def main(argv=None):
                                 generation_id=args.generation_id))
         elif args.command == 'verify':
             print(verify(args.generation))
+        elif args.command == 'evaluate-compression':
+            from .evaluation import evaluate as run_evaluation
+            report = run_evaluation(args.output,source_dir=args.source_dir,generation=args.generation,
+                                    iterations=args.iterations,warmup=args.warmup,seed=args.seed,force=args.force)
+            print(json.dumps({'report':str(Path(args.output)/'report.md'),
+                              'measurement_scope':report['measurement_scope'],
+                              'reproducible_artifacts':report['reproducibility']['identical'],
+                              'webp_to_raw_payload_ratio':report['webp_to_raw_payload_ratio'],
+                              'sizes':report['sizes']},sort_keys=True))
+            print(WARNING,file=sys.stderr)
         elif args.command == 'recognize-status':
             print(json.dumps(FindingsStore(args.findings).load(args.request_id),sort_keys=True))
         elif args.command == 'recognize':

@@ -39,3 +39,18 @@ jobs:
           python -m crystal_geo verify testdata/tiny_valid_generation
           target/debug/crystal-core verify testdata/tiny_valid_generation --allow-unsigned-development
           git diff --check
+      - name: Compression evaluation smoke run
+        run: >-
+          python -m crystal_geo evaluate-compression .cache/compression-ci
+          --generation testdata/tiny_valid_generation --source-dir testdata/source_images
+          --iterations 3 --warmup 1 --seed 0
+      - name: Upload compression evaluation reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: compression-evaluation-${{ runner.arch }}
+          retention-days: 14
+          path: |
+            .cache/compression-ci/report.json
+            .cache/compression-ci/report.md
+            .cache/compression-ci/samples.csv
+            .cache/compression-ci/protocol.json
