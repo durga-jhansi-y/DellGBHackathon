@@ -4,6 +4,15 @@ body.live #sample-tile-states, body.live .map-filter-bar, body.live .map-status-
 body.live .select-area-button, body.live #locate-button { display: none !important; }
 
 #live-map { position: absolute; inset: 0; background: #0d1512; }
+#leaflet { position: absolute; inset: 0; z-index: 0; isolation: isolate; background: #0d1512; }
+body.live-leaflet .scale-control, body.live-leaflet .map-attribution { display: none !important; }
+body.live-leaflet .leaflet-control-attribution { background: rgba(23,35,31,.85); color: var(--muted); font-size: 10px; }
+body.live-leaflet .leaflet-control-attribution a { color: var(--green); }
+body.live-leaflet .leaflet-control-scale-line { background: rgba(23,35,31,.85); color: var(--ink); border-color: var(--ink); }
+body.live-leaflet .leaflet-tooltip { background: #000c; color: var(--ink); border: 1px solid var(--line); box-shadow: none; }
+/* viewer docks on the right so the photo on the map stays visible */
+body.live-leaflet #live-viewer { inset: 10px 10px 10px auto; width: min(520px, 58%); grid-template-columns: 1fr; align-content: start; }
+body.live-leaflet .cmp { aspect-ratio: auto; height: min(300px, 38vh); }
 #live-canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
 #live-canvas.dragging { cursor: grabbing; }
 .live-chips { position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; flex-wrap: wrap; z-index: 3; }

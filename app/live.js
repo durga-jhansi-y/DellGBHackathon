@@ -23,6 +23,7 @@
     const images = await API.allImages();
     buildPoints(images);
     await refreshFindingIds();
+    try { S.mapboxToken = (await API.config()).mapbox_token || null; } catch (e) { S.mapboxToken = null; }
     map.mount();
     viewer.mount();
     patchControls();
@@ -76,7 +77,7 @@
   }
 
   /* ---------------- map ---------------- */
-  const map = (() => {
+  const canvasMap = (() => {   // fallback used only if Leaflet cannot load
     let canvas, ctx, W = 0, H = 0, drag = null, tip, chipsEl;
     const view = { cx: -97, cy: 30, ppd: 40 };
     const kx = () => Math.cos(view.cy * Math.PI / 180);
@@ -189,8 +190,84 @@
       if (line) line.style.width = `${Math.round(nice / kmPerPx)}px`;
     }
 
-    return { mount, draw, resize, fit, zoomAt, centerZoom: (f) => zoomAt({}, f), fitAll: () => fit(S.points) };
+    return { mount, draw, resize, fit, zoomAt, centerZoom: (f) => zoomAt({}, f), fitAll: () => fit(S.points), showOverlay() {}, clearOverlay() {} };
   })();
+
+  /* ---------------- live map (Leaflet + Mapbox / Esri / OpenStreetMap) ---------------- */
+  const leafletMap = (() => {
+    let m, layers = {}, order = [], current = null, markers, footprints, rings, overlay, warned = false;
+    const col = (p) => (p.paired ? '#d4ed74' : '#ffb454');
+
+    function mount() {
+      document.body.classList.add('live-leaflet');
+      const host = document.createElement('div');
+      host.id = 'live-map';
+      host.innerHTML = `<div id="leaflet"></div><div class="live-chips" id="live-chips"></div>
+        <div class="live-legend"><span><i style="background:#d4ed74"></i>Before/after pair</span><span><i style="background:#ffb454"></i>Single image (2025 aftermath)</span><span><i style="background:#7fd1ff"></i>Has AI finding</span></div>
+        <div class="live-note">${S.points.length.toLocaleString()} locations${S.noCoords ? ` · ${S.noCoords} images have no coordinates` : ''}. Click a location to open it and see the photo on the map.</div>`;
+      q('.map-surface').appendChild(host);
+      m = L.map(q('#leaflet'), { zoomControl: false, attributionControl: false, preferCanvas: true, minZoom: 3, maxZoom: 19 });
+      L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(m);
+      L.control.scale({ position: 'bottomleft', imperial: false }).addTo(m);
+      if (S.mapboxToken) layers.mapbox = { name: 'Mapbox satellite', layer: L.tileLayer(`https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/{z}/{x}/{y}?access_token=${encodeURIComponent(S.mapboxToken)}`, { tileSize: 512, zoomOffset: -1, maxZoom: 19, attribution: '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }) };
+      layers.esri = { name: 'Esri satellite', layer: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles © Esri — Maxar, Earthstar Geographics' }) };
+      layers.osm = { name: 'Street map', layer: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' }) };
+      order = Object.keys(layers);
+      Object.values(layers).forEach((l) => l.layer.on('tileerror', () => { if (!warned) { warned = true; showToast('Basemap tiles did not load (offline, blocked, or bad token). Image locations still work.'); } }));
+      setBase(order[0], false);
+      markers = L.layerGroup().addTo(m); footprints = L.layerGroup(); rings = L.layerGroup().addTo(m);
+      for (const p of S.points) {
+        const open = () => viewer.open(p.id);
+        L.circleMarker([p.lat, p.lon], { radius: 5, color: col(p), weight: 1, fillColor: col(p), fillOpacity: 0.85 })
+          .bindTooltip(`<strong>${esc(p.id)}</strong> · ${esc(p.date)} · ${esc(p.source || '')}${p.paired ? ' · before/after' : ''}`).on('click', open).addTo(markers);
+        footprints.addLayer(L.rectangle([[p.s, p.w], [p.n, p.e]], { color: col(p), weight: 1, fillOpacity: 0.08 }).on('click', open));
+      }
+      m.on('zoomend', syncFootprints);
+      const chips = [['All locations', S.points], ['Hurricane Harvey pairs', S.points.filter((p) => p.paired)], ['Hill Country 2025', S.points.filter((p) => !p.paired)]];
+      const chipsEl = q('#live-chips');
+      chips.forEach(([label, pts], i) => {
+        const b = document.createElement('button');
+        b.className = 'live-chip' + (i === 0 ? ' active' : ''); b.textContent = `${label} (${pts.length})`;
+        b.addEventListener('click', () => { chipsEl.querySelectorAll('.live-chip').forEach((c) => c.classList.toggle('active', c === b)); fit(pts); });
+        chipsEl.appendChild(b);
+      });
+      new ResizeObserver(() => m.invalidateSize()).observe(host);
+      requestAnimationFrame(() => { m.invalidateSize(); fit(S.points); draw(); });
+    }
+
+    function setBase(key, notify = true) {
+      Object.values(layers).forEach((l) => m.removeLayer(l.layer));
+      m.addLayer(layers[key].layer); current = key;
+      if (notify) showToast(`Basemap: ${layers[key].name}`);
+    }
+    const toggleBase = () => setBase(order[(order.indexOf(current) + 1) % order.length]);
+    const syncFootprints = () => { if (m.getZoom() >= 14 && S.showFootprints) m.addLayer(footprints); else m.removeLayer(footprints); };
+
+    function draw() {
+      if (!m) return;
+      if (S.showFootprints) m.addLayer(markers); else m.removeLayer(markers);
+      syncFootprints(); rings.clearLayers();
+      for (const p of S.points) {
+        if (S.showFindings && p.ids.some((id) => S.findingIds.has(id))) L.circleMarker([p.lat, p.lon], { radius: 10, color: '#7fd1ff', weight: 2, fill: false, interactive: false }).addTo(rings);
+        if (S.selected === p.id) L.circleMarker([p.lat, p.lon], { radius: 14, color: '#ffffff', weight: 2, fill: false, interactive: false }).addTo(rings);
+      }
+    }
+
+    function fit(pts) {
+      if (!pts.length || !m) return;
+      m.fitBounds(L.latLngBounds(pts.flatMap((p) => [[p.s, p.w], [p.n, p.e]])), { padding: [30, 30], maxZoom: 16 });
+    }
+    function clearOverlay() { if (overlay) { m.removeLayer(overlay); overlay = null; } }
+    function showOverlay(img) {
+      clearOverlay(); if (!m || img.west == null) return;
+      const b = [[img.south, img.west], [img.north, img.east]];
+      overlay = L.imageOverlay(API.fileUrl(img.image_id), b, { opacity: 0.92, interactive: false }).addTo(m);
+      const w = q('#map-stage').clientWidth;
+      m.fitBounds(b, { paddingTopLeft: [30, 60], paddingBottomRight: [Math.min(520, w * 0.58) + 30, 30], maxZoom: 18 });
+    }
+    return { mount, draw, fit, resize: () => m && m.invalidateSize(), fitAll: () => fit(S.points), centerZoom: (f) => (f > 1 ? m.zoomIn() : m.zoomOut()), showOverlay, clearOverlay, toggleBase };
+  })();
+  const map = window.L ? leafletMap : canvasMap;
 
   /* ---------------- viewer (before/after + AI) ---------------- */
   const viewer = (() => {
@@ -199,7 +276,7 @@
       el = document.createElement('div'); el.id = 'live-viewer'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Image viewer');
       q('#map-stage').appendChild(el);
     }
-    function close() { el.classList.remove('open'); S.selected = null; map.draw(); }
+    function close() { el.classList.remove('open'); S.selected = null; map.clearOverlay(); map.draw(); }
 
     async function open(id) {
       S.selected = id; map.draw();
@@ -208,6 +285,7 @@
       try { ({ before, after } = await API.pair(id)); }
       catch (e) { paired = false; try { after = await API.image(id); } catch (e2) { el.innerHTML = `<button class="lv-close">Close ✕</button><div class="lv-result err" style="margin:30px">${esc(e2.message)}</div>`; q('.lv-close', el).onclick = close; return; } }
       let detail = {}; try { detail = await API.image(after.image_id); } catch (e) { /* optional */ }
+      map.showOverlay(after);   // draw the flood photo on the map at its real coordinates
       const tag = (t) => `<span class="cmp-tag ${t === 'l' ? 'l' : 'r'}">`;
       const media = paired
         ? `<div class="cmp"><img class="cmp-base" alt="Before: ${esc(before.image_id)}" src="${API.fileUrl(before.image_id)}"><img class="cmp-top" alt="After: ${esc(after.image_id)}" src="${API.fileUrl(after.image_id)}"><div class="cmp-line"></div>
@@ -298,6 +376,7 @@
     rebind('#findings-toggle', (ev) => { const on = ev.currentTarget.querySelector('.toggle').classList.toggle('on'); S.showFindings = on; map.draw(); showToast(on ? 'Highlighting locations with AI findings' : 'Findings highlight off'); });
     const ft = q('#findings-toggle .toggle'); if (ft) ft.classList.add('on');
     rebind('#locate-button', () => showToast('Location is not enabled in this prototype'));
+    rebind('#layers-button', () => (map.toggleBase ? map.toggleBase() : showToast('Basemap switching needs the Leaflet map')));
   }
 
   function patchSetPage() {

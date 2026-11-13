@@ -19,6 +19,7 @@ model id and settings. A verification failure never serves the unverified bytes.
 """
 import hashlib
 import json
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -85,6 +86,14 @@ def health():
         n = con.execute("select count(*) from images").fetchone()[0]
         f = con.execute("select count(*) from findings").fetchone()[0]
     return {"status": "ok", "images": n, "findings": f, "model": vlm.MODEL}
+
+
+@app.get("/config")
+def public_config():
+    """Browser-safe settings. Only a Mapbox *public* token (pk.*) is ever returned; a secret
+    token (sk.*) or anything else is withheld."""
+    token = (os.environ.get("MAPBOX_TOKEN") or "").strip()
+    return {"mapbox_token": token if token.startswith("pk.") else None}
 
 
 @app.get("/images")

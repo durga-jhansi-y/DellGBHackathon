@@ -21,6 +21,7 @@
   window.CrystalAPI = {
     base,
     health: () => req('/health'),
+    config: () => req('/config'),
     images: (q = {}) => req('/images?' + qs(q)),
     async allImages() {
       const out = []; let offset = 0, total = Infinity;
