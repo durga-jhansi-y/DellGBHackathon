@@ -61,6 +61,13 @@ body.live-leaflet .cmp { aspect-ratio: auto; height: min(300px, 38vh); }
 .lv-result .tag { display: inline-block; font: 600 10px var(--mono, monospace); letter-spacing: .06em; color: #ffcf87; border: 1px solid #6b5326; border-radius: 4px; padding: 2px 6px; margin-bottom: 6px; }
 .lv-result.err { border-color: #8a3a3a; color: #ffb4b4; }
 .lv-hist { font-size: 11px; color: var(--muted); }
+.lv-wx { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--canvas); }
+.lv-wx-title { font: 600 10px var(--mono, monospace); letter-spacing: .08em; color: var(--muted); margin-bottom: 6px; }
+.lv-wx-title span { color: var(--green); letter-spacing: 0; }
+.lv-wx-row { font-size: 12px; color: var(--ink); line-height: 1.5; margin: 3px 0; }
+.lv-wx-row b { color: var(--muted); font-weight: 600; margin-right: 4px; }
+.lv-wx-row.warn { color: #ffcf87; }
+.lv-wx-row.warn b { color: #ffcf87; }
 @media (max-width: 900px) { #live-viewer.open { grid-template-columns: 1fr; } }
 
 /* findings page */

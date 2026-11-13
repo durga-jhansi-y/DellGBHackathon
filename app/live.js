@@ -198,7 +198,8 @@
 
   /* ---------------- live map (Leaflet + Mapbox / Esri / OpenStreetMap) ---------------- */
   const leafletMap = (() => {
-    let m, layers = {}, order = [], current = null, markers, footprints, rings, overlay, warned = false, online = true;
+    let m, layers = {}, order = [], current = null, markers, footprints, rings, overlay, radar, warned = false, online = true;
+    const hhmm = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const col = (p) => (p.paired ? '#d4ed74' : '#ffb454');
 
     function mount() {
@@ -231,9 +232,21 @@
       chips.forEach(([label, pts], i) => {
         const b = document.createElement('button');
         b.className = 'live-chip' + (i === 0 ? ' active' : ''); b.textContent = `${label} (${pts.length})`;
-        b.addEventListener('click', () => { chipsEl.querySelectorAll('.live-chip').forEach((c) => c.classList.toggle('active', c === b)); fit(pts); });
+        b.addEventListener('click', () => { chipsEl.querySelectorAll('.live-chip:not(#radar-chip)').forEach((c) => c.classList.toggle('active', c === b)); fit(pts); });
         chipsEl.appendChild(b);
       });
+      // Live NEXRAD weather radar (free, no key). Online data: shows only while the network is reachable.
+      radar = L.tileLayer('https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png', { opacity: 0.65, maxNativeZoom: 9, maxZoom: 19, attribution: 'Radar: NEXRAD via Iowa Environmental Mesonet' });
+      let radarWarned = false;
+      radar.on('tileerror', () => { if (!radarWarned) { radarWarned = true; showToast('Weather radar unavailable (needs internet)'); } });
+      const rb = document.createElement('button');
+      rb.className = 'live-chip'; rb.id = 'radar-chip'; rb.textContent = '☁ Live weather radar';
+      rb.addEventListener('click', () => {
+        const on = !m.hasLayer(radar);
+        if (on) { radarWarned = false; radar.addTo(m); radar.bringToFront(); } else m.removeLayer(radar);
+        rb.classList.toggle('active', on); rb.textContent = on ? `☁ Radar on · live ${hhmm()}` : '☁ Live weather radar';
+      });
+      chipsEl.appendChild(rb);
       new ResizeObserver(() => m.invalidateSize()).observe(host);
       setTimeout(() => { m.invalidateSize(); fit(S.points); draw(); if (!online) setOnline(false); }, 30);   // timer, not rAF: rAF is paused in unfocused windows
     }
@@ -241,6 +254,7 @@
     function setBase(key, notify = true) {
       Object.values(layers).forEach((l) => m.removeLayer(l.layer));
       m.addLayer(layers[key].layer); current = key;
+      if (radar && m.hasLayer(radar)) radar.bringToFront();
       if (notify) showToast(`Basemap: ${layers[key].name}`);
     }
     const toggleBase = () => setBase(order[(order.indexOf(current) + 1) % order.length]);
@@ -280,6 +294,32 @@
   const map = window.L ? leafletMap : canvasMap;
   const isOnline = () => document.body.dataset.networkMode === 'online';
 
+  /* ---------------- live weather (Open-Meteo + US National Weather Service; free, no keys) ---------------- */
+  const WX = (() => {
+    const CODES = { 0: 'Clear', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Fog', 51: 'Light drizzle', 53: 'Drizzle', 55: 'Heavy drizzle', 56: 'Freezing drizzle', 57: 'Freezing drizzle',
+      61: 'Light rain', 63: 'Rain', 65: 'Heavy rain', 66: 'Freezing rain', 67: 'Freezing rain', 71: 'Light snow', 73: 'Snow', 75: 'Heavy snow', 77: 'Snow grains', 80: 'Rain showers', 81: 'Rain showers',
+      82: 'Violent rain showers', 85: 'Snow showers', 86: 'Snow showers', 95: 'Thunderstorm', 96: 'Thunderstorm with hail', 99: 'Thunderstorm with hail' };
+    const get = async (url, opts = {}) => {
+      const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 8000);
+      try { const r = await fetch(url, { ...opts, signal: ctl.signal }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return await r.json(); } finally { clearTimeout(t); }
+    };
+    async function current(lat, lon) {
+      const d = await get(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,precipitation,wind_speed_10m,weather_code&hourly=precipitation&past_days=1&forecast_days=1&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`);
+      const nowMs = Date.parse(`${d.current.time}Z`);   // API gives local naive times; compare like with like
+      const rain24 = d.hourly.time.reduce((s, t, i) => { const ms = Date.parse(`${t}Z`); return ms <= nowMs && ms > nowMs - 24 * 3600e3 ? s + (d.hourly.precipitation[i] || 0) : s; }, 0);
+      return { temp: d.current.temperature_2m, wind: d.current.wind_speed_10m, rainNow: d.current.precipitation, rain24, code: d.current.weather_code };
+    }
+    async function alerts(lat, lon) {
+      const d = await get(`https://api.weather.gov/alerts/active?point=${lat.toFixed(4)},${lon.toFixed(4)}`, { headers: { Accept: 'application/geo+json' } });
+      return d.features.map((f) => ({ event: f.properties.event, severity: f.properties.severity }));
+    }
+    async function onDate(lat, lon, date) {
+      const d = await get(`https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${date}&end_date=${date}&daily=precipitation_sum&timezone=auto`);
+      return d.daily.precipitation_sum[0];
+    }
+    return { CODES, current, alerts, onDate };
+  })();
+
   /* ---------------- viewer (before/after + AI) ---------------- */
   const viewer = (() => {
     let el;
@@ -295,7 +335,7 @@
       let before = null, after, paired = true;
       try { ({ before, after } = await API.pair(id)); }
       catch (e) { paired = false; try { after = await API.image(id); } catch (e2) { el.innerHTML = `<button class="lv-close">Close ✕</button><div class="lv-result err" style="margin:30px">${esc(e2.message)}</div>`; q('.lv-close', el).onclick = close; return; } }
-      let detail = {}; try { detail = await API.image(after.image_id); } catch (e) { /* optional */ }
+      let detail = {}; try { detail = await API.image(after.image_id, true); } catch (e) { /* optional */ }
       map.showOverlay(after);   // draw the flood photo on the map at its real coordinates
       const tag = (t) => `<span class="cmp-tag ${t === 'l' ? 'l' : 'r'}">`;
       const media = paired
@@ -312,6 +352,7 @@
             <div><span>Resolution</span><strong>${detail.native_resolution_min_m != null ? esc(detail.native_resolution_min_m) + ' m' : '—'}</strong></div>
             <div><span>Bounds (W,S,E,N)</span><strong>${fmt(after.west)}, ${fmt(after.south)}, ${fmt(after.east)}, ${fmt(after.north)}</strong></div>
           </div>
+          <div class="lv-wx"><div class="lv-wx-title">WEATHER <span id="lv-wx-live"></span></div><div id="lv-wx-body" class="lv-sub">Checking live conditions…</div></div>
           <div class="lv-ai">
             ${paired ? '<button id="lv-change">Compare before / after with Qwen</button>' : ''}
             <div class="lv-ai-row"><input id="lv-q" type="text" maxlength="500" value="Is there flooding visible? Which roads or buildings are affected?" aria-label="Question about the ${paired ? 'after ' : ''}image"><button id="lv-ask" class="secondary">Ask</button></div>
@@ -334,6 +375,30 @@
       ask.onclick = () => run(ask, 'Qwen is looking at the image', renderAnswer);
       loadHistory(after.image_id, el);
       applyNetworkUI();
+      loadWeather(after, detail);
+    }
+
+    // Live conditions + active NWS alerts at the photo's location, and rain on the photo's date.
+    async function loadWeather(img, detail) {
+      const body = q('#lv-wx-body', el), live = q('#lv-wx-live', el); if (!body || img.west == null) { if (body) body.textContent = 'No coordinates for this image.'; return; }
+      const lat = (img.south + img.north) / 2, lon = (img.west + img.east) / 2, date = img.acquisition_date;
+      const [cur, al, hist] = await Promise.allSettled([WX.current(lat, lon), WX.alerts(lat, lon), WX.onDate(lat, lon, date)]);
+      if (!el.isConnected || q('#lv-wx-body', el) !== body) return;   // viewer moved on
+      const rows = [];
+      if (cur.status === 'fulfilled') {
+        const c = cur.value; live.textContent = `· Live · updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        rows.push(`<div class="lv-wx-row"><b>Now</b> ${esc(Math.round(c.temp))}°F · ${esc(WX.CODES[c.code] || 'Conditions')} · wind ${esc(Math.round(c.wind))} mph · rain now ${esc(c.rainNow)} mm · last 24 h ${esc(c.rain24.toFixed(1))} mm</div>`);
+      }
+      if (al.status === 'fulfilled') {
+        rows.push(al.value.length
+          ? `<div class="lv-wx-row warn">⚠ <b>${al.value.map((a) => esc(a.event)).slice(0, 3).join(' · ')}</b> active here (National Weather Service)</div>`
+          : '<div class="lv-wx-row">No active weather alerts here (National Weather Service)</div>');
+      }
+      const stationMm = detail && detail.raw ? detail.raw.precipitation_mm : null;
+      if (hist.status === 'fulfilled' || stationMm != null) {
+        rows.push(`<div class="lv-wx-row"><b>Rain on ${esc(date)}</b>${hist.status === 'fulfilled' && hist.value != null ? ` · ${esc(Number(hist.value).toFixed(1))} mm (Open-Meteo)` : ''}${stationMm != null ? ` · ${esc(stationMm)} mm (nearest weather station, in the dataset)` : ''}</div>`);
+      }
+      body.innerHTML = rows.length ? rows.join('') : 'Live weather unavailable (needs internet). Imagery and saved findings still work.';
     }
 
     function verifyImages(root) {

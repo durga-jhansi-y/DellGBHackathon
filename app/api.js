@@ -33,7 +33,7 @@
       }
       return out;
     },
-    image: (imageId) => req(`/images/${id(imageId)}`),
+    image: (imageId, full = false) => req(`/images/${id(imageId)}${full ? '?full=true' : ''}`),
     pair: (imageId) => req(`/pairs/${id(imageId)}`),
     fileUrl: (imageId) => `${base}/images/${id(imageId)}/file`,
     ask: (image_id, question) => post('/ai/ask', { image_id, question }),
