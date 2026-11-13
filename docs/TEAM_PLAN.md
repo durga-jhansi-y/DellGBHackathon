@@ -24,8 +24,8 @@ to agree, because each change breaks someone else.
 
 | Contract | File | Owner | Consumers |
 |---|---|---|---|
-| Repository interfaces: `DatasetRepository`, `TileRepository`, `RecognitionRepository`, `TrustRepository` | `app/lib/core/repositories/*.dart` | B | A, C (they implement the real ones) |
-| Rust API: `open_generation`, `query_tiles`, `read_verified_tile`, `decode_tile`, `close_generation` and typed errors (build doc 6.6, section 9) | `crates/crystal_core` public API | C | B (via the Dart bridge) |
+| Repository interfaces: `DatasetRepository`, `TileRepository`, `RecognitionRepository`, `TrustRepository` | `app/lib/core/repositories/*.dart` | Greatness | D,S (they implement the real ones) |
+| Rust API: `open_generation`, `query_tiles`, `read_verified_tile`, `decode_tile`, `close_generation` and typed errors (build doc 6.6, section 9) | `crates/crystal_core` public API | Shruthi | D (via the Dart bridge) |
 | Service API (OpenAPI): datasets, generations, download manifests, findings, AI ask | `backend/openapi.yaml` | A | B, C |
 | Findings JSON schema | `schemas/findings.schema.json` | A | B |
 | Package manifest and index schema | `schemas/manifest.cddl`, `schemas/index.sql` | C | A (catalog mirrors it), B (display fields) |
