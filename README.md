@@ -3,6 +3,19 @@
 Proposed architecture for secure offline imagery retrieval, map rendering,
 and local recognition. Capabilities require implementation and validation.
 
+The Python development slice builds and verifies the TX003 offline before/after
+fixture, installs generations through staging, atomically switches the active
+pointer, and retrieves verified tiles through pinned generation readers. See
+[fixture usage](docs/fixture-usage.md) and [generation store usage](docs/generation-store.md).
+The [read-only Rust core](docs/rust-core.md) independently verifies these
+packages and returns verified compressed tiles and bounded decoded pixels.
+CI checks both implementations and their byte/pixel parity.
+An [experimental recognition queue](docs/recognition.md) connects pinned Rust
+tile reads to the GB10's local VLM, with cancellation and saved provenance.
+It uses an **unsigned development manifest that must never be accepted in
+production**, and is for development and noncommercial demonstration only.
+The remaining architecture below is still proposed.
+
 ```mermaid
 flowchart TD
     Sources["Imagery sources"]

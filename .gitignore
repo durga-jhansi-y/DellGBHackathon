@@ -6,12 +6,19 @@
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
+.cache/
+*.egg-info/
 .venv/
 .ipynb_checkpoints/
 
-# Downloaded data
+# Downloaded / generated data (local only)
 data/
 *.sqlite
+!testdata/**/*.sqlite
+
+# Rust
+target/
 
 # OS / editor
 .DS_Store
