@@ -7,6 +7,7 @@ description = "Read-only verification and retrieval for unsigned Crystal Geo dev
 publish = false
 
 [dependencies]
+base64 = "=0.22.1"
 image = { version = "=0.25.8", default-features = false, features = ["webp"] }
 rusqlite = { version = "=0.37.0", features = ["bundled", "serialize", "limits", "hooks"] }
 serde = { version = "=1.0.228", features = ["derive"] }

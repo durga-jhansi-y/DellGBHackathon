@@ -62,6 +62,26 @@ pub enum Error {
     Image(#[from] image::ImageError),
 }
 
+impl Error {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::UnsignedGenerationRejected => "UnsignedGenerationRejected",
+            Self::ManifestInvalid(_) | Self::Json(_) => "ManifestInvalid",
+            Self::UnsafePath(_) => "UnsafePath",
+            Self::IndexInvalid(_) | Self::Sqlite(_) => "IndexInvalid",
+            Self::GenerationChanged => "GenerationChanged",
+            Self::PayloadOutOfBounds => "PayloadOutOfBounds",
+            Self::PayloadHashMismatch => "PayloadHashMismatch",
+            Self::FileHashMismatch(_) => "FileHashMismatch",
+            Self::CodecUnsupported => "CodecUnsupported",
+            Self::DecodeLimitExceeded => "DecodeLimitExceeded",
+            Self::TileNotFound => "TileNotFound",
+            Self::Io(_) => "StorageError",
+            Self::Image(_) => "DecodeFailed",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub enum TrustPolicy {
     #[default]
@@ -69,7 +89,7 @@ pub enum TrustPolicy {
     DevelopmentUnsigned,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Variant {
     Before,
@@ -142,6 +162,7 @@ pub struct DecodedTile {
 /// Directory renames or activation of another generation cannot change the handle.
 pub struct Generation {
     generation_id: String,
+    manifest_sha256: [u8; 32],
     container: File,
     container_size: u64,
     tiles: BTreeMap<TileKey, TileDescriptor>,
@@ -187,6 +208,7 @@ impl Generation {
         let tiles = read_index(&index_bytes, &generation_id, container_record.file.size)?;
         let result = Self {
             generation_id,
+            manifest_sha256: hash_bytes(&raw),
             container,
             container_size: container_record.file.size,
             tiles,
@@ -203,6 +225,13 @@ impl Generation {
 
     pub fn generation_id(&self) -> &str {
         &self.generation_id
+    }
+
+    pub fn manifest_sha256(&self) -> String {
+        self.manifest_sha256
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
     }
 
     pub fn descriptors(&self) -> impl Iterator<Item = &TileDescriptor> {

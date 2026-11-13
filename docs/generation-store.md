@@ -136,5 +136,6 @@ directories private and use the API for updates. A read/open performs full
 package verification; this has not been benchmarked for large datasets. Retaining
 every generation consumes disk indefinitely. Production signatures, protected
 rollback state, garbage collection, resumed network downloads, mobile platform
-durability testing, and the Rust port remain future work. Flutter, recognition
-and encryption remain out of scope.
+durability testing, and the Rust installer port remain future work. The separate
+[experimental recognition queue](recognition.md) now uses the read-only Rust core.
+Flutter and encryption remain out of scope.

@@ -10,7 +10,8 @@ demonstration. See [source attribution and reuse terms](fixture-usage.md).
 ## Build and check
 
 Rust 1.88.0, rustfmt and Clippy are pinned in `rust-toolchain.toml`. Dependency
-versions and registry checksums are pinned in `Cargo.lock`. Build from the
+versions and registry checksums are pinned in `Cargo.lock`. Install Python test
+dependencies with `python3 -m pip install -e '.[test]'`. Build from the
 workspace root with a C compiler for the bundled SQLite dependency:
 
 ```sh
@@ -112,7 +113,9 @@ header changes, truncation, and index/container pinning.
 
 This port does not yet implement Rust installation/activation, active-pointer
 reading, garbage collection, Flutter/FFI bindings, production signatures,
-encryption, recognition or a general-purpose codec interface. Python remains
+encryption or a general-purpose codec interface. The separate
+[experimental recognition queue](recognition.md) now uses a bounded JSON-lines
+`serve` process to retain a Rust reader per job. Python remains
 the installer; Rust can open its installed `generations/<id>/package` directory.
 The accepted profile and size limits remain deliberately fixed to TX003. Both
 readers assume a trusted local directory; they are not hardened against an

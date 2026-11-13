@@ -80,6 +80,31 @@ class RustParityTests(unittest.TestCase):
             repeated = self.run_core('read-tile',FIXTURE,'before',18,61440,108284,output)
             self.assertEqual(1,repeated.returncode)
 
+    def test_persistent_protocol_rejects_wrong_generation_and_unknown_fields(self):
+        command = [str(Path(BINARY).resolve()),'serve',str(FIXTURE),'--allow-unsigned-development']
+        with subprocess.Popen(command,cwd=REPO,stdin=subprocess.PIPE,stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE,text=True) as process:
+            hello = json.loads(process.stdout.readline())
+            self.assertEqual(digest_manifest(),hello['manifest_sha256'])
+            request = {'request_id':1,'generation_id':'wrong-generation','variant':'before','zoom':18,'x':61440,'y':108284}
+            process.stdin.write(json.dumps(request)+'\n')
+            process.stdin.flush()
+            reply = json.loads(process.stdout.readline())
+            self.assertFalse(reply['ok'])
+            self.assertEqual('GenerationChanged',reply['error']['code'])
+            request['unexpected'] = True
+            process.stdin.write(json.dumps(request)+'\n')
+            process.stdin.flush()
+            self.assertEqual('ProtocolInvalid',json.loads(process.stdout.readline())['error']['code'])
+            process.stdin.close()
+            self.assertEqual(0,process.wait(timeout=10))
+
+    def test_persistent_protocol_bounds_input_lines(self):
+        command = [str(Path(BINARY).resolve()),'serve',str(FIXTURE),'--allow-unsigned-development']
+        process = subprocess.run(command,input='x'*4097+'\n',cwd=REPO,capture_output=True,text=True,timeout=30)
+        self.assertEqual(1,process.returncode)
+        self.assertIn('ProtocolInvalid',process.stderr)
+
     def test_existing_python_rejection_cases_are_also_rejected_by_rust(self):
         cases = [
             'modified_tile_bytes','modified_index','truncated_container','incorrect_container_size',
@@ -106,3 +131,7 @@ class RustParityTests(unittest.TestCase):
                     getattr(case,'test_'+name)()
                 finally:
                     case.doCleanups()
+
+
+def digest_manifest():
+    return hashlib.sha256((FIXTURE/'manifest.json').read_bytes()).hexdigest()

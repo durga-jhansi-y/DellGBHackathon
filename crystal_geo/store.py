@@ -97,6 +97,14 @@ class DecodedTile:
     height: int = 256
 
 
+@dataclass(frozen=True)
+class PackageReference:
+    dataset_id: str
+    generation_id: str
+    manifest_sha256: str
+    path: Path
+
+
 class GenerationLease:
     """A pinned container descriptor and an immutable, verified index snapshot."""
     def __init__(self, package, manifest):
@@ -328,6 +336,20 @@ class GenerationStore:
         check(isinstance(record['manifest_sha256'],str)
               and re.fullmatch('[0-9a-f]{64}',record['manifest_sha256']), 'StateInvalid', 'invalid manifest hash')
         return record
+
+    @errors
+    def active_package_reference(self):
+        """Snapshot pointer/READY identity; caller must verify package bytes before use."""
+        record = self.active_info()
+        check(record is not None, 'GenerationUnavailable', 'no active generation')
+        location = self.generations/record['generation_id']
+        self._directory(location)
+        self._directory(location/'package')
+        check({p.name for p in location.iterdir()} == {'package','READY'},
+              'GenerationInvalid', 'incomplete published generation')
+        ready = {'generation_id':record['generation_id'],'manifest_sha256':record['manifest_sha256']}
+        check(read_record(location/'READY') == ready,'GenerationInvalid','READY marker mismatch')
+        return PackageReference(DATASET_ID,record['generation_id'],record['manifest_sha256'],location/'package')
 
     @errors
     def open_active(self):

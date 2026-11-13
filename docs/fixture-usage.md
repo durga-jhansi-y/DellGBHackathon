@@ -12,7 +12,7 @@ From the repository root, use Python 3.11+ with SQLite R-tree/STRICT support and
 Pillow with WebP support. Install the pinned Python dependency if needed:
 
 ```sh
-python3 -m pip install -e .
+python3 -m pip install -e '.[test]'
 python3 -m crystal_geo build-fixture testdata/tiny_valid_generation --force
 python3 -m crystal_geo verify testdata/tiny_valid_generation
 python3 -m unittest discover -s tests -v
@@ -128,7 +128,7 @@ unsafe paths/symlinks, and CLI failures.
 This is a TX003 development format, not a general geospatial packager or a
 production trusted mobile core. A [read-only Rust port](rust-core.md) now verifies
 and retrieves these packages independently. It has no publisher authentication, rollback
-protection, protected storage, downloads with resume, Flutter UI, recognition,
+protection, protected storage, downloads with resume, Flutter UI,
 encryption, or production signing. The separate [generation store](generation-store.md)
 adds staged installation, durable-write ordering, atomic activation and pinned
 readers. `build-fixture --generation-id tx003-dev-v2` creates another generation
