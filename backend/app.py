@@ -20,8 +20,11 @@ model id and settings. A verification failure never serves the unverified bytes.
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import sys
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
@@ -33,6 +36,48 @@ from pydantic import BaseModel, Field
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "ai"))
 import vlm_client as vlm  # noqa: E402  (reads QWEN_* from .env)
+
+HF_BASE = "https://huggingface.co/datasets/jennifer-fowler/UTSA-flood-images/resolve/main/"
+SAVED_PATH = ROOT / "backend" / "saved_analyses.json"
+# Live AI needs the UTSA Qwen server. Set AI_MODE=saved (e.g. on Render, where that server is unreachable)
+# to serve only the saved analyses.
+AI_LIVE = (os.environ.get("AI_MODE", "live").lower() != "saved"
+           and bool(os.environ.get("QWEN_BASE_URL")) and bool(os.environ.get("QWEN_API_KEY")))
+_saved_cache = {"mtime": None, "items": []}
+
+
+def saved_items():
+    try:
+        mtime = SAVED_PATH.stat().st_mtime
+    except OSError:
+        return []
+    if _saved_cache["mtime"] != mtime:
+        _saved_cache["items"] = json.loads(SAVED_PATH.read_text(encoding="utf-8")).get("items", [])
+        _saved_cache["mtime"] = mtime
+    return _saved_cache["items"]
+
+
+def fetch_image(rel: str, sha256: str) -> Path:
+    """Photos are not stored in Git. If a photo is missing on this server, download it from the public
+    Hugging Face dataset, check its SHA-256 against the published value, and cache it."""
+    if not re.fullmatch(r"images/[A-Za-z0-9_.\-]+", rel):
+        raise HTTPException(400, "Bad image path")
+    dest = ROOT / "data" / "hf" / rel
+    req = urllib.request.Request(HF_BASE + urllib.parse.quote(rel), headers={"User-Agent": "crystal-geo/0.1"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = r.read(25 * 1024 * 1024 + 1)
+    except Exception as e:
+        raise HTTPException(502, f"Could not fetch image from the dataset host: {type(e).__name__}")
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(502, "Image larger than the 25 MB limit")
+    if hashlib.sha256(data).hexdigest() != sha256:
+        raise HTTPException(500, "PayloadHashMismatch: refusing to serve unverified image")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    tmp.write_bytes(data)
+    tmp.replace(dest)
+    return dest
 
 DB = ROOT / "data" / "crystal.sqlite"
 SUMMARY = ("image_id, pair_id, paired_image_id, image_role, acquisition_date, locality, "
@@ -61,13 +106,15 @@ def summary(row) -> dict:
 
 def run_ai(fn, *args):
     """vlm_client exits with a message on bad input; turn that into an HTTP error."""
+    if not AI_LIVE:
+        raise HTTPException(503, "Live AI is not available in this deployment. Saved analyses are shown instead.")
     try:
         return fn(*args)
     except SystemExit as e:
         msg = str(e.code) if e.code not in (None, 0) else "AI request failed"
         status = 404 if "Unknown image_id" in msg else 400
         raise HTTPException(status, msg)
-    except Exception as e:  # network/model errors from the GB10
+    except Exception as e:  # network/model errors from the Qwen server
         raise HTTPException(502, f"AI backend error: {type(e).__name__}")
 
 
@@ -85,7 +132,7 @@ def health():
     with connect() as con:
         n = con.execute("select count(*) from images").fetchone()[0]
         f = con.execute("select count(*) from findings").fetchone()[0]
-    return {"status": "ok", "images": n, "findings": f, "model": vlm.MODEL}
+    return {"status": "ok", "images": n, "findings": f, "model": vlm.MODEL, "live_ai": AI_LIVE, "saved_analyses": len(saved_items())}
 
 
 sys.path.insert(0, str(ROOT))
@@ -178,7 +225,7 @@ def get_image_file(image_id: str):
         raise HTTPException(404, f"Unknown image_id: {image_id}")
     path = ROOT / "data" / "hf" / row["image_path"]
     if not path.exists():
-        raise HTTPException(404, "Image file not downloaded on this server")
+        path = fetch_image(row["image_path"], row["sha256"])
     if hashlib.sha256(path.read_bytes()).hexdigest() != row["sha256"]:
         raise HTTPException(500, "PayloadHashMismatch: refusing to serve unverified image")
     return FileResponse(path, headers={"X-Image-SHA256": row["sha256"],
@@ -212,6 +259,38 @@ def ai_change(body: ChangeBody):
     result = run_ai(vlm.change, body.image_id)
     return {"image_id": body.image_id, "result": result, "model": vlm.MODEL,
             "reviewed_by_human": False, "notice": "Model-generated; not verified."}
+
+
+@app.get("/analyses/{image_id}")
+def saved_analysis(image_id: str):
+    """Saved (pre-computed) analyses for an image or its before/after partner."""
+    items = [i for i in saved_items() if i["image_id"] == image_id or i.get("paired_image_id") == image_id]
+    if not items:
+        raise HTTPException(404, "No saved analysis for this image")
+    return {"items": items, "notice": "Saved on the UTSA Qwen server. Model output, not human-reviewed."}
+
+
+@app.on_event("startup")
+def seed_findings():
+    """A fresh deployment has an empty findings table. Fill it from the saved analyses so the
+    Findings page and map markers work without live AI."""
+    items = saved_items()
+    if not items or not DB.exists():
+        return
+    with connect() as con:
+        if con.execute("select count(*) from findings").fetchone()[0]:
+            return
+        for i in items:
+            if i["kind"] == "change":
+                answer = json.dumps({"flooding_visible_after": i.get("flooding_visible_after"),
+                                     "changes": i.get("changes"), "confidence": i.get("confidence")})
+                question = "before/after flood change"
+            else:
+                answer, question = i.get("answer") or "", i.get("question")
+            con.execute("insert into findings (kind,image_id,paired_image_id,question,answer,confidence,imagery_time,"
+                        "model_id,settings_json) values (?,?,?,?,?,?,?,?,?)",
+                        (i["kind"], i["image_id"], i.get("paired_image_id"), question, answer, i.get("confidence"),
+                         i.get("imagery_time"), i.get("model_id") or vlm.MODEL, json.dumps({"source": "saved"})))
 
 
 @app.get("/findings")

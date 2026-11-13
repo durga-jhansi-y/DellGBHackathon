@@ -1,0 +1,17 @@
+# Render blueprint for the Crystal Geo API (free plan).
+# Secrets are NOT stored here. Add any keys in the Render dashboard under Environment.
+services:
+  - type: web
+    name: crystal-geo-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt pandas && python db/load.py
+    startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: AI_MODE        # the UTSA Qwen server is not reachable from Render: serve saved analyses
+        value: saved
+      - key: QWEN_MODEL
+        value: qwen3-vl-8b-instruct

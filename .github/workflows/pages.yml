@@ -1,0 +1,62 @@
+# Deploys the Crystal Geo web app to GitHub Pages and points it at the API (for example on Render).
+#
+# One-time setup in the repo:
+#   Settings -> Pages -> Source: GitHub Actions
+#   Settings -> Secrets and variables -> Actions -> Variables -> New repository variable
+#     Name: API_BASE   Value: https://your-service.onrender.com
+# (A repository secret named API_BASE also works. The address is public either way:
+#  it ends up in the page's JavaScript, so never put keys or passwords in it.)
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write the API address into app/config.js
+        env:
+          API_BASE: ${{ vars.API_BASE || secrets.API_BASE }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, sys
+          base = (os.environ.get("API_BASE") or "").strip().rstrip("/")
+          if not base:
+              print("API_BASE is not set: the page will show the sample interface only.")
+              sys.exit(0)
+          if not re.fullmatch(r"https://[A-Za-z0-9.-]+(:[0-9]+)?", base):
+              sys.exit("API_BASE must look like https://your-service.onrender.com")
+          with open("app/config.js", "w", encoding="utf-8") as f:
+              f.write("window.CRYSTAL_API_BASE = " + json.dumps(base) + ";\n")
+          print("API address written to app/config.js")
+          PY
+
+      - name: Assemble the site (only the app, not the whole repo)
+        run: |
+          mkdir _site
+          cp index.html .nojekyll _site/
+          cp -r app _site/app
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

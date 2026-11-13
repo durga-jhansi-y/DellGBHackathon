@@ -379,6 +379,20 @@
       loadHistory(after.image_id, el);
       applyNetworkUI();
       loadWeather(after, detail);
+      showSaved(after);
+    }
+
+    // Saved (pre-computed) analysis for this location, shown without any AI call.
+    async function showSaved(img) {
+      const out = q('#lv-out', el); if (!out) return;
+      try {
+        const { items } = await API.analysis(img.image_id);
+        if (!el.isConnected || q('#lv-out', el) !== out || out.innerHTML.trim()) return;
+        const c = items.find((i) => i.kind === 'change'), a = items.find((i) => i.kind === 'qa');
+        const when = (r) => String(r.created_at || '').slice(0, 10);
+        out.innerHTML = (c ? `<div class="lv-result"><span class="tag">SAVED ANALYSIS · UTSA QWEN · ${esc(when(c))}</span><div><strong>Flooding visible after: ${esc(c.flooding_visible_after)}</strong></div><div>${esc(c.changes)}</div></div>` : '')
+          + (a ? `<div class="lv-result" style="margin-top:6px"><span class="tag">SAVED ANSWER · UTSA QWEN · ${esc(when(a))}</span><div>${esc(a.answer)}</div></div>` : '');
+      } catch (e) { /* none saved for this location */ }
     }
 
     // Live conditions + active NWS alerts at the photo's location, and rain on the photo's date.
@@ -452,8 +466,13 @@
     const on = isOnline();
     if (map.setOnline) map.setOnline(on);
     const lbl = q('#network-mode-label'); if (lbl) lbl.textContent = on ? 'Online mode' : 'Offline mode';
-    document.querySelectorAll('#lv-change, #lv-ask, #ff button[type=submit]').forEach((b) => { b.disabled = !on; b.title = on ? '' : 'Switch to Online mode to use AI'; });
-    document.querySelectorAll('.offline-hint').forEach((h) => { h.style.display = on ? 'none' : 'block'; });
+    const liveAI = !S.health || S.health.live_ai !== false;   // false on deployments that cannot reach the Qwen server
+    const can = on && liveAI;
+    document.querySelectorAll('#lv-change, #lv-ask, #ff button[type=submit]').forEach((b) => { b.disabled = !can; b.title = can ? '' : (liveAI ? 'Switch to Online mode to use AI' : 'Live AI is not available here'); });
+    document.querySelectorAll('.offline-hint').forEach((h) => {
+      h.textContent = liveAI ? 'Offline mode: AI needs the network. Switch to Online mode (top right) to use it.' : 'Live AI is not available in this deployment. Saved analyses from the UTSA Qwen server are shown instead.';
+      h.style.display = can ? 'none' : 'block';
+    });
   }
 
   function patchNetwork() {

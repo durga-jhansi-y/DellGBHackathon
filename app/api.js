@@ -8,7 +8,8 @@
     else if (q && /^https?:\/\/[^\s]+$/i.test(q)) localStorage.setItem('crystalApi', q);
     stored = localStorage.getItem('crystalApi');
   } catch (e) { /* storage blocked */ }
-  const base = (stored || (location.protocol.startsWith('http') ? location.origin : 'http://localhost:8000')).replace(/\/$/, '');
+  const configured = (window.CRYSTAL_API_BASE || '').trim();   // from config.js
+  const base = (stored || configured || (location.protocol.startsWith('http') ? location.origin : 'http://localhost:8000')).replace(/\/$/, '');
 
   async function req(path, opts) {
     const r = await fetch(base + path, opts);
@@ -44,5 +45,6 @@
     ask: (image_id, question) => post('/ai/ask', { image_id, question }),
     change: (image_id) => post('/ai/change', { image_id }),
     findings: (q = {}) => req('/findings?' + qs(q)),
+    analysis: (imageId) => req(`/analyses/${id(imageId)}`),
   };
 })();
