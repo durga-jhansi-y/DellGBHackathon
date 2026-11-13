@@ -29,6 +29,7 @@
     patchControls();
     renderInfoPanel();
     patchSetPage();
+    patchNetwork();
     setPage(currentView);
   }
 
@@ -195,7 +196,7 @@
 
   /* ---------------- live map (Leaflet + Mapbox / Esri / OpenStreetMap) ---------------- */
   const leafletMap = (() => {
-    let m, layers = {}, order = [], current = null, markers, footprints, rings, overlay, warned = false;
+    let m, layers = {}, order = [], current = null, markers, footprints, rings, overlay, warned = false, online = true;
     const col = (p) => (p.paired ? '#d4ed74' : '#ffb454');
 
     function mount() {
@@ -232,7 +233,7 @@
         chipsEl.appendChild(b);
       });
       new ResizeObserver(() => m.invalidateSize()).observe(host);
-      requestAnimationFrame(() => { m.invalidateSize(); fit(S.points); draw(); });
+      setTimeout(() => { m.invalidateSize(); fit(S.points); draw(); if (!online) setOnline(false); }, 30);   // timer, not rAF: rAF is paused in unfocused windows
     }
 
     function setBase(key, notify = true) {
@@ -240,7 +241,13 @@
       m.addLayer(layers[key].layer); current = key;
       if (notify) showToast(`Basemap: ${layers[key].name}`);
     }
-    const toggleBase = () => setBase(order[(order.indexOf(current) + 1) % order.length]);
+    const toggleBase = () => { if (!online) { showToast('The basemap needs Online mode'); return; } setBase(order[(order.indexOf(current) + 1) % order.length]); };
+    // Online mode loads basemap tiles from the network; Offline mode shows only installed imagery.
+    function setOnline(on) {
+      online = on; if (!m || !m._loaded) return;   // before the first view is set, mount() applies the state
+      Object.values(layers).forEach((l) => m.removeLayer(l.layer));
+      if (on && current) m.addLayer(layers[current].layer);
+    }
     const syncFootprints = () => { if (m.getZoom() >= 14 && S.showFootprints) m.addLayer(footprints); else m.removeLayer(footprints); };
 
     function draw() {
@@ -265,9 +272,10 @@
       const w = q('#map-stage').clientWidth;
       m.fitBounds(b, { paddingTopLeft: [30, 60], paddingBottomRight: [Math.min(520, w * 0.58) + 30, 30], maxZoom: 18 });
     }
-    return { mount, draw, fit, resize: () => m && m.invalidateSize(), fitAll: () => fit(S.points), centerZoom: (f) => (f > 1 ? m.zoomIn() : m.zoomOut()), showOverlay, clearOverlay, toggleBase };
+    return { mount, draw, fit, resize: () => m && m.invalidateSize(), fitAll: () => fit(S.points), centerZoom: (f) => (f > 1 ? m.zoomIn() : m.zoomOut()), showOverlay, clearOverlay, toggleBase, setOnline };
   })();
   const map = window.L ? leafletMap : canvasMap;
+  const isOnline = () => document.body.dataset.networkMode === 'online';
 
   /* ---------------- viewer (before/after + AI) ---------------- */
   const viewer = (() => {
@@ -297,7 +305,6 @@
           <span class="lv-badge" id="lv-badge">Checking SHA-256…</span>
           <div class="lv-facts">
             <div><span>Source</span><strong>${paired ? `${esc(before.source_agency)} → ${esc(after.source_agency)}` : esc(after.source_agency)}</strong></div>
-            <div><span>Size</span><strong>${esc(after.width_px)} × ${esc(after.height_px)} px</strong></div>
             <div><span>Event</span><strong>${esc(detail.event_name || '—')}</strong></div>
             <div><span>Resolution</span><strong>${detail.native_resolution_min_m != null ? esc(detail.native_resolution_min_m) + ' m' : '—'}</strong></div>
             <div><span>Bounds (W,S,E,N)</span><strong>${fmt(after.west)}, ${fmt(after.south)}, ${fmt(after.east)}, ${fmt(after.north)}</strong></div>
@@ -306,6 +313,7 @@
           <div class="lv-ai">
             ${paired ? '<button id="lv-change">Compare before / after with Qwen</button>' : ''}
             <div class="lv-ai-row"><input id="lv-q" type="text" maxlength="500" value="Is there flooding visible? Which roads or buildings are affected?" aria-label="Question about the ${paired ? 'after ' : ''}image"><button id="lv-ask" class="secondary">Ask</button></div>
+            <div class="lv-hist offline-hint" style="display:none">Offline mode: AI needs the network. Switch to Online mode (top right) to use it.</div>
             <div id="lv-out"></div><div class="lv-hist" id="lv-hist"></div>
           </div></div>`;
       q('.lv-close', el).onclick = close;
@@ -315,7 +323,7 @@
       const run = async (btn, label, fn) => {
         btn.disabled = true; out.innerHTML = `<div class="lv-result">${esc(label)}…</div>`;
         try { out.innerHTML = fn(await (btn.__call())); } catch (e) { out.innerHTML = `<div class="lv-result err">${esc(e.message)}</div>`; }
-        btn.disabled = false; refreshFindingIds(); loadHistory(after.image_id, el);
+        btn.disabled = false; applyNetworkUI(); refreshFindingIds(); loadHistory(after.image_id, el);
       };
       const ch = q('#lv-change', el);
       if (ch) { ch.__call = () => API.change(after.image_id); ch.onclick = () => run(ch, 'Qwen is comparing the two images', renderChange); }
@@ -323,6 +331,7 @@
       ask.__call = () => API.ask(after.image_id, q('#lv-q', el).value.trim());
       ask.onclick = () => run(ask, 'Qwen is looking at the image', renderAnswer);
       loadHistory(after.image_id, el);
+      applyNetworkUI();
     }
 
     function verifyImages(root) {
@@ -367,6 +376,27 @@
     q('#provenance-button').addEventListener('click', () => openModal('provenance'));
   }
 
+  /* Online mode = network services connected (basemap tiles, AI). Offline = installed imagery only. */
+  function applyNetworkUI() {
+    const on = isOnline();
+    if (map.setOnline) map.setOnline(on);
+    const lbl = q('#network-mode-label'); if (lbl) lbl.textContent = on ? 'Online mode' : 'Offline mode';
+    document.querySelectorAll('#lv-change, #lv-ask, #ff button[type=submit]').forEach((b) => { b.disabled = !on; b.title = on ? '' : 'Switch to Online mode to use AI'; });
+    document.querySelectorAll('.offline-hint').forEach((h) => { h.style.display = on ? 'none' : 'block'; });
+  }
+
+  function patchNetwork() {
+    const base = window.setNetworkMode;
+    window.setNetworkMode = function (mode, notify) {
+      base(mode, false);   // original handles the button state; its "not connected" toast is replaced below
+      applyNetworkUI();
+      if (notify) showToast(mode === 'online' ? 'Online mode · basemap tiles and AI are connected' : 'Offline mode · installed imagery only (no basemap, no AI)');
+    };
+    let saved = null; try { saved = localStorage.getItem('crystalGeoNetworkMode'); } catch (e) { /* storage blocked */ }
+    window.setNetworkMode(saved || 'online');   // services are live: default to Online unless the user chose Offline
+    window.addEventListener('offline', () => window.setNetworkMode('offline', true));
+  }
+
   function rebind(id, handler) { const el = q(id); if (!el) return; const c = el.cloneNode(true); el.replaceWith(c); c.addEventListener('click', handler); return c; }
   function patchControls() {
     rebind('#zoom-in', () => map.centerZoom(1.6));
@@ -381,7 +411,7 @@
 
   function patchSetPage() {
     const base = window.setPage;
-    window.setPage = function (view) { base(view); if (view === 'map') requestAnimationFrame(() => map.resize()); if (view === 'findings') renderFindings(); };
+    window.setPage = function (view) { base(view); if (view === 'map') setTimeout(() => map.resize(), 30); if (view === 'findings') renderFindings(); };
     const baseDatasets = window.renderDatasets;
     window.renderDatasets = function () {
       baseDatasets();
@@ -400,13 +430,15 @@
     const root = q('#secondary-view');
     root.innerHTML = `<div class="empty-card"><div class="empty-icon">◇</div><span class="eyebrow">EXPERIMENTAL · LIVE RESULTS</span><h2>Field findings</h2><p>Answers from Qwen, saved with imagery date and model. Model output is probabilistic, not a confirmed fact.</p></div>
       <form class="live-form" id="ff"><input id="ff-id" placeholder="Image id, e.g. TX001_2017_NOAA" value="${esc(S.selected || 'TX001_2017_NOAA')}" aria-label="Image id"><input id="ff-q" placeholder="Ask a question about this image" value="Is there flooding visible? One sentence." aria-label="Question"><button type="submit">Ask Qwen</button></form>
+      <div class="lv-hist offline-hint" style="display:none">Offline mode: AI needs the network. Switch to Online mode (top right) to ask new questions. Saved findings below are still available.</div>
       <div id="ff-out"></div><div id="ff-list"><p class="lv-sub">Loading findings…</p></div>`;
+    applyNetworkUI();
     q('#ff', root).addEventListener('submit', async (ev) => {
       ev.preventDefault(); const btn = q('button', ev.currentTarget), out = q('#ff-out', root); btn.disabled = true;
       out.innerHTML = '<div class="lv-result">Qwen is looking at the image…</div>';
       try { const r = await API.ask(q('#ff-id', root).value.trim(), q('#ff-q', root).value.trim()); out.innerHTML = `<div class="lv-result"><span class="tag">MODEL-GENERATED · UNREVIEWED</span><div>${esc(r.answer)}</div></div>`; await refreshFindingIds(); fillList(root); }
       catch (e) { out.innerHTML = `<div class="lv-result err">${esc(e.message)}</div>`; }
-      btn.disabled = false;
+      btn.disabled = false; applyNetworkUI();
     });
     fillList(root);
   }
