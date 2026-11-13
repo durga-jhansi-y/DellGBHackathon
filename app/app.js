@@ -18,6 +18,73 @@ const pages = {
   settings: { crumb: 'Settings', title: 'Settings', subtitle: 'Configure storage, network policy, and trust.', eyebrow: 'YOUR WORKSPACE' }
 };
 
+const datasetCatalog = [
+  { id: 'north-cascades', name: 'North Cascades National Park', region: 'Washington, US', kind: 'Satellite imagery', capture: 'Aug 14 – 28, 2024', generation: 'NCNP-2024.08.2', size: '2.4 GB', publisher: 'USGS Earth Explorer', state: 'ready', active: true, download: 100, verification: 100 },
+  { id: 'olympic', name: 'Olympic Peninsula', region: 'Washington, US', kind: 'Terrain imagery', capture: 'May 02 – 18, 2025', generation: 'OLYM-2025.05.1', size: '1.1 GB', publisher: 'USGS Earth Explorer', state: 'available', active: false, download: 0, verification: 0 },
+  { id: 'rainier', name: 'Mount Rainier', region: 'Washington, US', kind: 'Satellite imagery', capture: 'Jul 11 – 23, 2025', generation: 'RAIN-2025.07.1', size: '860 MB', publisher: 'USGS Earth Explorer', state: 'available', active: false, download: 0, verification: 0 }
+];
+let datasetTab = 'installed';
+const datasetTimers = new Map();
+
+function renderDatasets() {
+  const installed = datasetCatalog.filter((dataset) => dataset.state !== 'available');
+  const available = datasetCatalog.filter((dataset) => dataset.state === 'available');
+  const rows = datasetTab === 'installed' ? installed : available;
+  const card = (dataset) => {
+    const stateLabel = { ready: dataset.active ? 'Active · verified' : 'Ready offline', downloading: 'Downloading', paused: 'Paused', verifying: 'Verifying package', failed: 'Download failed', available: 'Available' }[dataset.state];
+    const actions = dataset.state === 'available'
+      ? `<button class="button button-primary" data-action="download" data-id="${dataset.id}">↓ Download</button>`
+      : dataset.state === 'downloading'
+        ? `<button class="button button-secondary" data-action="pause" data-id="${dataset.id}">Ⅱ Pause</button>`
+        : dataset.state === 'paused'
+          ? `<button class="button button-primary" data-action="resume" data-id="${dataset.id}">▶ Resume</button><button class="button button-secondary" data-action="cancel" data-id="${dataset.id}">Cancel</button>`
+          : dataset.state === 'verifying'
+            ? `<button class="button button-secondary" disabled>Verifying…</button>`
+            : dataset.state === 'failed'
+              ? `<button class="button button-primary" data-action="download" data-id="${dataset.id}">Retry</button><button class="button button-secondary" data-action="cancel" data-id="${dataset.id}">Remove partial</button>`
+              : `<button class="button button-secondary" data-action="verify" data-id="${dataset.id}">↻ Verify again</button>${dataset.active ? '' : `<button class="button button-secondary" data-action="activate" data-id="${dataset.id}">Make active</button>`}<button class="text-action" data-action="remove" data-id="${dataset.id}">Remove</button>`;
+    const progress = dataset.state === 'downloading' || dataset.state === 'paused' ? `<div class="phase-row"><div><strong>Download</strong><span>${dataset.download}% · ${dataset.size}</span></div><div class="phase-track"><i style="width:${dataset.download}%"></i></div></div>` : '';
+    const verify = dataset.state === 'verifying' ? `<div class="phase-row verify-phase"><div><strong>Verify package</strong><span>${dataset.verification}% · checking signature and tile hashes</span></div><div class="phase-track"><i style="width:${dataset.verification}%"></i></div></div>` : '';
+    return `<article class="dataset-card" data-state="${dataset.state}"><div class="dataset-art"><span>OFFLINE REGION</span><b>▧</b><i class="art-contour"></i><i class="art-contour second"></i></div><div class="dataset-card-main"><div class="dataset-card-top"><div><h3>${dataset.name}</h3><p>${dataset.region} <span>·</span> ${dataset.kind}</p></div><span class="dataset-state ${dataset.state}"><i></i>${stateLabel}</span></div><div class="dataset-meta"><span><small>CAPTURE</small>${dataset.capture}</span><span><small>PACKAGE</small>${dataset.size}</span><span><small>GENERATION</small><code>${dataset.generation}</code></span><span><small>PUBLISHER</small>${dataset.publisher}</span></div>${progress}${verify}<div class="dataset-card-actions">${actions}</div></div></article>`;
+  };
+  $('#secondary-view').innerHTML = `<div class="dataset-page-intro"><div><span class="eyebrow">OFFLINE LIBRARY · SAMPLE CATALOG</span><h2>Maps for the field</h2><p>Download a region before you lose connection. A package is ready only after verification finishes.</p></div><div class="storage-meter"><span>DEVICE STORAGE</span><strong>12.8 <small>of 20 GB</small></strong><div><i></i></div></div></div><div class="dataset-tabs" role="tablist"><button class="dataset-tab ${datasetTab === 'installed' ? 'active' : ''}" data-tab="installed" role="tab" aria-selected="${datasetTab === 'installed'}">Installed <b>${installed.length}</b></button><button class="dataset-tab ${datasetTab === 'available' ? 'active' : ''}" data-tab="available" role="tab" aria-selected="${datasetTab === 'available'}">Available <b>${available.length}</b></button><span class="catalog-note"><i></i> Sample data · sync not connected</span></div><div class="dataset-card-list">${rows.length ? rows.map(card).join('') : '<div class="dataset-empty">No maps in this list yet.</div>'}</div>`;
+  $('#secondary-view').querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => { datasetTab = button.dataset.tab; renderDatasets(); }));
+  $('#secondary-view').querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => handleDatasetAction(button.dataset.action, button.dataset.id)));
+}
+
+function handleDatasetAction(action, id) {
+  const dataset = datasetCatalog.find((item) => item.id === id);
+  if (!dataset) return;
+  if (action === 'activate') {
+    datasetCatalog.forEach((item) => { item.active = item.id === id; });
+    renderDatasets(); showToast(`${dataset.name} is now the active offline map`); return;
+  }
+  if (action === 'remove' || action === 'cancel') {
+    dataset.state = 'available'; dataset.download = 0; dataset.verification = 0; dataset.active = false;
+    renderDatasets(); showToast('Sample package removed from the installed list'); return;
+  }
+  if (action === 'pause') {
+    clearInterval(datasetTimers.get(id)); dataset.state = 'paused'; renderDatasets(); showToast('Download paused · resume any time'); return;
+  }
+  if (action === 'verify') {
+    dataset.state = 'verifying'; dataset.verification = 12; renderDatasets();
+    const timer = setInterval(() => { dataset.verification = Math.min(100, dataset.verification + 22); if (dataset.verification >= 100) { clearInterval(timer); dataset.state = 'ready'; showToast('Package verified · imagery is ready offline'); } renderDatasets(); }, 500);
+    datasetTimers.set(id, timer); return;
+  }
+  if (action === 'download' || action === 'resume') {
+    dataset.state = 'downloading'; renderDatasets(); showToast('Downloading sample map package');
+    const timer = setInterval(() => {
+      dataset.download = Math.min(100, dataset.download + 16);
+      if (dataset.download >= 100) {
+        clearInterval(timer); dataset.state = 'verifying'; dataset.verification = 8; renderDatasets();
+        const verifyTimer = setInterval(() => { dataset.verification = Math.min(100, dataset.verification + 23); if (dataset.verification >= 100) { clearInterval(verifyTimer); dataset.state = 'ready'; datasetTab = 'installed'; showToast('Download complete · package verified and ready offline'); } renderDatasets(); }, 500);
+        datasetTimers.set(id, verifyTimer);
+      } else renderDatasets();
+    }, 500);
+    datasetTimers.set(id, timer);
+  }
+}
+
 function setPage(view) {
   const page = pages[view] || pages.map;
   document.querySelectorAll('.nav-link').forEach((button) => button.classList.toggle('active', button.dataset.view === view));
@@ -28,10 +95,10 @@ function setPage(view) {
   $('#map-view').classList.toggle('hidden', view !== 'map');
   $('#secondary-view').classList.toggle('hidden', view === 'map');
 
-  const library = '<div class="empty-card"><div class="empty-icon">▤</div><span class="eyebrow">DATASET LIBRARY · SAMPLE DATA</span><h2>Your offline datasets</h2><p>Manage imagery prepared for disconnected field work.</p><button class="button button-primary" data-action="download">＋ Download a dataset</button></div><div class="dataset-row"><div class="dataset-row-thumb">▧</div><div class="dataset-row-main"><strong>North Cascades National Park</strong><span>Washington, US · Satellite · 2.4 GB · Active generation NCNP-2024.08.2</span></div><span class="verified-pill">✓ Ready offline</span><button class="row-more" data-action="dataset">Details</button></div><div class="dataset-row"><div class="dataset-row-thumb muted-thumb">▧</div><div class="dataset-row-main"><strong>Olympic Peninsula</strong><span>Washington, US · Terrain imagery · 1.1 GB</span></div><span class="downloaded-label">Available to download</span><button class="row-more" data-action="download">＋ Add</button></div>';
+  if (view === 'datasets') { datasetTab = 'installed'; renderDatasets(); return; }
   const findings = '<div class="empty-card"><div class="empty-icon">◇</div><span class="eyebrow">EXPERIMENTAL · SAMPLE RESULT</span><h2>Field findings</h2><p>Recognition is an asynchronous, experimental workflow. Review imagery context before treating a result as meaningful.</p><button class="button button-secondary" data-action="ask">Ask about an area</button></div><div class="dataset-row"><div class="finding-avatar">◇</div><div class="dataset-row-main"><strong>Possible slope change</strong><span>North Cascades · imagery Aug 21, 2024 · confidence 0.87</span></div><span class="downloaded-label">Unreviewed</span><button class="row-more" data-action="finding">View</button></div><div class="detail-callout">Model output is probabilistic, not a confirmed fact. This sample finding is not connected to a recognition service.</div>';
   const settings = '<div class="empty-card"><div class="empty-icon">⚙</div><span class="eyebrow">LOCAL DEVICE · PROTOTYPE</span><h2>Field-ready settings</h2><p>Control how offline maps use storage and network access.</p></div><div class="settings-card"><div><strong>Offline mode</strong><span>Keep map browsing on installed data only.</span></div><span class="verified-pill">On</span></div><div class="settings-card"><div><strong>Local storage</strong><span>12.8 GB used of 20 GB available.</span></div><span class="downloaded-label">Manage</span></div><div class="settings-card"><div><strong>Trusted publisher</strong><span>USGS Earth Explorer · sample trust record.</span></div><span class="verified-pill">✓ Trusted</span></div><div class="detail-callout">Prototype settings are illustrative and do not change device permissions or storage.</div>';
-  $('#secondary-view').innerHTML = view === 'datasets' ? library : view === 'findings' ? findings : settings;
+  $('#secondary-view').innerHTML = view === 'findings' ? findings : settings;
   $('#secondary-view').querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', () => {
     const action = button.dataset.action;
     if (action === 'dataset') openModal('details');
