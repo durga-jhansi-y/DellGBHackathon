@@ -14,7 +14,10 @@
     catch (e) {
       const b = document.createElement('div');
       b.className = 'live-banner';
-      b.textContent = `Crystal Geo API not reachable at ${API.base}. Showing the built-in sample prototype. Start the API: python -m uvicorn backend.app:app --port 8000`;
+      const local = ['localhost', '127.0.0.1'].includes(location.hostname);
+      b.textContent = local
+        ? `Crystal Geo API not reachable at ${API.base}. Showing the sample prototype. Start the API: python -m uvicorn backend.app:app --port 8000`
+        : 'Live data and AI run on the Crystal Geo API, which is not connected to this page. You are seeing the interface with sample data.';
       q('.main-content').insertBefore(b, q('.page-heading'));
       return;
     }

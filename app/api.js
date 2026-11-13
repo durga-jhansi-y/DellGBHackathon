@@ -2,7 +2,12 @@
    set localStorage.crystalApi = "http://host:8000" to point at another server. */
 (() => {
   let stored = null;
-  try { stored = localStorage.getItem('crystalApi'); } catch (e) { /* storage blocked */ }
+  try {
+    const q = new URLSearchParams(location.search).get('api');   // e.g. .../app/?api=http://localhost:8000
+    if (q === 'reset') localStorage.removeItem('crystalApi');
+    else if (q && /^https?:\/\/[^\s]+$/i.test(q)) localStorage.setItem('crystalApi', q);
+    stored = localStorage.getItem('crystalApi');
+  } catch (e) { /* storage blocked */ }
   const base = (stored || (location.protocol.startsWith('http') ? location.origin : 'http://localhost:8000')).replace(/\/$/, '');
 
   async function req(path, opts) {
