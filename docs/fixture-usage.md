@@ -123,11 +123,15 @@ round trips, reproducibility, HTTPS downgrade rejection, certificate validation,
 download cleanup, strict SQL constraints, geographic bounds and R-tree entries,
 unsafe paths/symlinks, and CLI failures.
 
-This is a fixed TX003 Python development format, not a general geospatial
-packager or the Rust trusted mobile core. It has no publisher authentication,
-rollback protection, protected storage, crash-durable activation, generation
-leases, downloads with resume, Flutter UI, recognition, encryption, or production
-signing. `--force` uses two directory renames with restoration on ordinary error;
+This is a TX003 Python development format, not a general geospatial packager
+or the Rust trusted mobile core. It has no publisher authentication, rollback
+protection, protected storage, downloads with resume, Flutter UI, recognition,
+encryption, or production signing. The separate [generation store](generation-store.md)
+adds staged installation, durable-write ordering, atomic activation and pinned
+readers. `build-fixture --generation-id tx003-dev-v2` creates another generation
+with the same imagery and a distinct safe identifier; identifiers are never
+overwritten in the installed store. The packaging command's `--force` still
+uses two directory renames with restoration on ordinary error;
 a crash between them can temporarily leave the output path absent. Use a single
 writer in a trusted local directory: read-only modes and symlink checks do not
 protect against a concurrent adversary replacing files, parent directories, or

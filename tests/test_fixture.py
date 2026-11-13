@@ -166,7 +166,7 @@ class FixtureTests(unittest.TestCase):
         manifest = self.manifest()
         manifest['generation_id'] = 'other-generation'
         self.save_manifest(manifest)
-        self.reject('generation_id mismatch')
+        self.reject('generation mismatch')
 
     def test_generation_mismatch_in_index(self):
         self.sql('UPDATE generation_metadata SET generation_id=?', ('other-generation',))

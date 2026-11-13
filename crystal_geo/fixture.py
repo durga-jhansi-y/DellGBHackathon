@@ -90,11 +90,18 @@ def tile_bounds(x, y):
     return (lon(x), lat(y + 1), lon(x + 1), lat(y))
 
 
-def header():
+def validate_generation_id(generation_id):
+    require(isinstance(generation_id, str)
+            and re.fullmatch(r'[a-z0-9][a-z0-9-]{0,63}', generation_id),
+            'unsafe generation identifier')
+    return generation_id
+
+
+def header(generation_id=GENERATION_ID):
     # 8-byte magic, big-endian version and size, fixed-width NUL-padded IDs,
     # 80 reserved zero bytes, then SHA-256 over the preceding 224 bytes.
     prefix = struct.pack('>8sII64s64s80s', b'CGEOdev1', 1, HEADER_SIZE,
-                         GENERATION_ID.encode(), CONTAINER_ID.encode(), b'')
+                         validate_generation_id(generation_id).encode(), CONTAINER_ID.encode(), b'')
     return prefix + hashlib.sha256(prefix).digest()
 
 
@@ -143,9 +150,9 @@ def source_paths(source_dir=None):
     return result
 
 
-def manifest_base():
+def manifest_base(generation_id=GENERATION_ID):
     return {'format': 'crystal-geo-unsigned-dev-v1', 'format_version': 1,
-            'dataset_id': DATASET_ID, 'generation_id': GENERATION_ID,
+            'dataset_id': DATASET_ID, 'generation_id': generation_id,
             'signature_status': 'unsigned-development', 'production_acceptable': False,
             'warning': WARNING, 'purpose': 'development and noncommercial demonstration',
             'coverage': {'crs': 'EPSG:4326', 'bounds': COVERAGE, 'grid_crs': 'EPSG:3857'},
@@ -157,7 +164,8 @@ def schema_signature(db):
     return db.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY name').fetchall()
 
 
-def build_fixture(output, *, force=False, source_dir=None):
+def build_fixture(output, *, force=False, source_dir=None, generation_id=GENERATION_ID):
+    validate_generation_id(generation_id)
     output = Path(output).absolute()
     require(not output.is_symlink(), 'symlink output rejected')
     # Never recursively delete arbitrary data through --force. Only replace a valid fixture.
@@ -176,9 +184,9 @@ def build_fixture(output, *, force=False, source_dir=None):
         try:
             db.executescript(SCHEMA)
             db.execute('INSERT INTO generation_metadata VALUES (?,?,?,?,?,?)',
-                       (DATASET_ID, GENERATION_ID, 1, 'EPSG:4326', 'EPSG:3857', ZOOM))
+                       (DATASET_ID, generation_id, 1, 'EPSG:4326', 'EPSG:3857', ZOOM))
             with container.open('xb') as stream:
-                stream.write(header())
+                stream.write(header(generation_id))
                 tile_id = 0
                 for source, path in zip(PROVENANCE['sources'], images):
                     db.execute('INSERT INTO sources VALUES (?,?,?,?,?,?,?,?)',
@@ -201,7 +209,7 @@ def build_fixture(output, *, force=False, source_dir=None):
                                     require(offset + len(payload) <= MAX_CONTAINER, 'container limit exceeded')
                                     stream.write(payload)
                                     bounds = tile_bounds(START_X + x, START_Y + y)
-                                    row = (tile_id, GENERATION_ID, source['image_id'], source['variant'],
+                                    row = (tile_id, generation_id, source['image_id'], source['variant'],
                                            ZOOM, START_X+x, START_Y+y, *bounds, 256, 256, CONTAINER_ID,
                                            offset, len(payload), 'webp', canonical(CODEC).decode().strip(),
                                            hashlib.sha256(payload).digest())
@@ -214,7 +222,7 @@ def build_fixture(output, *, force=False, source_dir=None):
             db.commit()
         finally:
             db.close()
-        manifest = manifest_base()
+        manifest = manifest_base(generation_id)
         manifest['toolchain'] = {'pillow': PIL.__version__, 'webp': features.version('webp'),
                                  'sqlite': sqlite3.sqlite_version}
         manifest['index'] = {'path': 'index.sqlite', 'size': (stage/'index.sqlite').stat().st_size,
@@ -258,7 +266,8 @@ def _verify(root):
                           parse_constant=lambda _: (_ for _ in ()).throw(FixtureError('non-finite JSON')))
     require(isinstance(manifest, dict), 'manifest must be an object')
     require(raw == canonical(manifest), 'manifest is not canonical development JSON')
-    base = manifest_base()
+    generation_id = validate_generation_id(manifest.get('generation_id'))
+    base = manifest_base(generation_id)
     require(set(manifest) == set(base) | {'toolchain', 'index', 'containers'}, 'manifest fields invalid')
     for key, expected in base.items():
         require(canonical(manifest[key]) == canonical(expected), f'manifest {key} mismatch')
@@ -288,7 +297,7 @@ def _verify(root):
             'unexpected package files')
     index, container = paths
     with container.open('rb') as stream:
-        require(stream.read(HEADER_SIZE) == header(), 'invalid container header or generation mismatch')
+        require(stream.read(HEADER_SIZE) == header(generation_id), 'invalid container header or generation mismatch')
         db = sqlite3.connect(index.resolve().as_uri() + '?mode=ro&immutable=1', uri=True)
         try:
             db.execute('PRAGMA query_only=ON')
@@ -308,7 +317,7 @@ def _verify(root):
             require(db.execute('PRAGMA integrity_check').fetchall() == [('ok',)], 'index integrity failure')
             require(not db.execute('PRAGMA foreign_key_check').fetchall(), 'index foreign key failure')
             require(db.execute('SELECT * FROM generation_metadata').fetchall() ==
-                    [(DATASET_ID, GENERATION_ID, 1, 'EPSG:4326', 'EPSG:3857', ZOOM)],
+                    [(DATASET_ID, generation_id, 1, 'EPSG:4326', 'EPSG:3857', ZOOM)],
                     'index generation mismatch')
             source_rows = db.execute('SELECT * FROM sources ORDER BY variant DESC').fetchall()
             expected_sources = [(s['image_id'], s['variant'], s['acquisition_date'],
@@ -327,7 +336,7 @@ def _verify(root):
                 source = PROVENANCE['sources'][i // 16]
                 tx, ty = START_X + i % 4, START_Y + (i % 16) // 4
                 require((tile_id, generation, source_id, variant, zoom, x, y) ==
-                        (i+1, GENERATION_ID, source['image_id'], source['variant'], ZOOM, tx, ty),
+                        (i+1, generation_id, source['image_id'], source['variant'], ZOOM, tx, ty),
                         'tile generation or coordinate mismatch')
                 require(all(math.isfinite(v) and abs(v-e) <= 1e-12
                             for v, e in zip((west,south,east,north), tile_bounds(tx,ty))), 'tile bounds mismatch')
@@ -345,21 +354,27 @@ def _verify(root):
                 payload = stream.read(length)
                 require(len(payload) == length, 'truncated tile payload')
                 require(hashlib.sha256(payload).digest() == stored_hash, 'tile payload SHA-256 mismatch')
-                # Integrity precedes every decode. Dimensions are checked before loading pixels.
-                require(payload[:4] == b'RIFF' and payload[8:12] == b'WEBP'
-                        and payload[12:16] == b'VP8L', 'expected lossless WebP')
-                with io.BytesIO(payload) as encoded:
-                    with Image.open(encoded) as image:
-                        require(image.format == 'WEBP' and image.size == (256,256), 'decode dimensions exceeded')
-                        image.load()
+                decode_payload(payload)
                 previous_end = offset + length
             require(previous_end == size, 'unindexed trailing container bytes')
         finally:
             db.close()
-    return f'VERIFIED: {GENERATION_ID}; 32 lossless WebP tiles (16 before, 16 after); {WARNING}'
+    return manifest
 
 
-def verify(root):
+def decode_payload(payload):
+    """Caller must authenticate bytes before using this bounded decoder."""
+    require(len(payload) <= 1048576 and payload[:4] == b'RIFF'
+            and payload[8:12] == b'WEBP' and payload[12:16] == b'VP8L', 'expected lossless WebP')
+    with io.BytesIO(payload) as encoded:
+        with Image.open(encoded) as image:
+            require(image.format == 'WEBP' and image.size == (256,256), 'decode dimensions exceeded')
+            with image.convert('RGBA') as rgba:
+                return rgba.tobytes()
+
+
+def verified_manifest(root):
+    """Return metadata only after the complete development generation verifies."""
     try:
         return _verify(root)
     except FixtureError:
@@ -367,3 +382,9 @@ def verify(root):
     except (OSError, sqlite3.Error, ValueError, TypeError, KeyError, IndexError,
             OverflowError, RecursionError, Image.DecompressionBombError) as exc:
         raise FixtureError(f'invalid fixture: {exc}') from exc
+
+
+def verify(root):
+    manifest = verified_manifest(root)
+    return (f"VERIFIED: {manifest['generation_id']}; 32 lossless WebP tiles "
+            f'(16 before, 16 after); {WARNING}')
