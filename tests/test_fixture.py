@@ -86,11 +86,21 @@ class FixtureTests(unittest.TestCase):
     def test_reproducible_build_and_force(self):
         output = Path(self.temporary.name)/'rebuilt'
         build_fixture(output, source_dir=SOURCES)
-        for relative in ['manifest.json', 'index.sqlite', CONTAINER_PATH]:
-            self.assertEqual((FIXTURE/relative).read_bytes(), (output/relative).read_bytes())
+        relatives = ['manifest.json', 'index.sqlite', CONTAINER_PATH]
+        first = {relative: (output/relative).read_bytes() for relative in relatives}
+        # Native SQLite/WebP versions vary by platform. Reproduction is always
+        # required within one toolchain; compare the historical baseline when
+        # that toolchain also matches the one recorded in the checked-in fixture.
+        baseline = json.loads((FIXTURE/'manifest.json').read_text())
+        current = json.loads(first['manifest.json'])
+        if baseline['toolchain'] == current['toolchain']:
+            for relative in relatives:
+                self.assertEqual((FIXTURE/relative).read_bytes(),first[relative])
         with self.assertRaisesRegex(FixtureError, 'output exists'):
             build_fixture(output, source_dir=SOURCES)
         build_fixture(output, force=True, source_dir=SOURCES)
+        for relative in relatives:
+            self.assertEqual(first[relative],(output/relative).read_bytes())
         self.assertIn('VERIFIED', verify(output))
 
     def test_modified_tile_bytes(self):

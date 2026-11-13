@@ -1,0 +1,41 @@
+name: Crystal Geo checks
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crystal-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CRYSTAL_RUST_BINARY: ${{ github.workspace }}/target/debug/crystal-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Python dependencies
+        run: python -m pip install -e .
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal --component rustfmt --component clippy
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Lint Rust
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Test Rust and build the parity CLI
+        run: |
+          cargo test --locked --workspace
+          cargo build --locked --workspace
+      - name: Test Python, reproducibility, recovery and cross-language parity
+        run: python -m unittest discover -s tests -v
+      - name: Verify fixture independently in both languages
+        run: |
+          python -m crystal_geo verify testdata/tiny_valid_generation
+          target/debug/crystal-core verify testdata/tiny_valid_generation --allow-unsigned-development
+          git diff --check

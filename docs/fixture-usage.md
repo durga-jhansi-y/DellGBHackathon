@@ -112,8 +112,10 @@ offset checks also enforce `length <= container_size - offset`.
 Rebuilds were byte-identical with Python 3.12.3, Pillow 10.2.0, libwebp 1.3.2,
 and SQLite 3.45.1. The Python dependency/build backend are pinned; native WebP
 and SQLite versions are recorded, not bundled. Different native toolchains can
-produce different bytes. The reproduction test compares against the included
-generation and therefore requires this toolchain for byte-exact equality.
+produce different bytes. The reproduction test always compares repeated builds
+on the current toolchain, and also compares against the included generation
+when its recorded native versions match. The Rust/Python parity tests check the
+included generation independently without rebuilding its compressed payloads.
 
 ## Checks and limits
 
@@ -123,8 +125,9 @@ round trips, reproducibility, HTTPS downgrade rejection, certificate validation,
 download cleanup, strict SQL constraints, geographic bounds and R-tree entries,
 unsafe paths/symlinks, and CLI failures.
 
-This is a TX003 Python development format, not a general geospatial packager
-or the Rust trusted mobile core. It has no publisher authentication, rollback
+This is a TX003 development format, not a general geospatial packager or a
+production trusted mobile core. A [read-only Rust port](rust-core.md) now verifies
+and retrieves these packages independently. It has no publisher authentication, rollback
 protection, protected storage, downloads with resume, Flutter UI, recognition,
 encryption, or production signing. The separate [generation store](generation-store.md)
 adds staged installation, durable-write ordering, atomic activation and pinned
