@@ -62,7 +62,10 @@ def image_row(con, image_id):
 
 def local_image(row) -> Path:
     """Download (once) and verify the image against its published sha256."""
-    local = ROOT / "data" / "hf" / row["image_path"]     # full local download, if present
+    # Folder that contains images/ (set IMAGES_DIR in .env to use a download elsewhere,
+    # e.g. U:\...\data\hf); defaults to this repo's data/hf.
+    base = Path(os.environ["IMAGES_DIR"]) if os.environ.get("IMAGES_DIR") else ROOT / "data" / "hf"
+    local = base / row["image_path"]
     path = local if local.exists() else IMG_DIR / Path(row["image_path"]).name
     if not path.exists():
         IMG_DIR.mkdir(parents=True, exist_ok=True)
