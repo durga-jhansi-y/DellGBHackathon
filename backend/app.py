@@ -88,6 +88,32 @@ def health():
     return {"status": "ok", "images": n, "findings": f, "model": vlm.MODEL}
 
 
+sys.path.insert(0, str(ROOT))
+try:
+    from crystal_geo import fixture as pkg   # Shruthi's offline package verifier
+except Exception:  # pragma: no cover - keeps the API up if her module is missing
+    pkg = None
+PKG_DIR = ROOT / "testdata" / "tiny_valid_generation"
+
+
+@app.get("/generation")
+def generation():
+    """Verify the offline package (Shruthi's pipeline) and report what it covers.
+    Every call re-checks the manifest, index and all tile hashes; nothing is trusted from a cache."""
+    if pkg is None or not PKG_DIR.is_dir():
+        raise HTTPException(503, "Offline package module not available")
+    try:
+        m = pkg.verified_manifest(PKG_DIR)
+        message, ok = pkg.verify(PKG_DIR), True
+    except Exception as e:
+        return {"verified": False, "error": str(e)[:200]}
+    w, s, e_, n = m["coverage"]["bounds"]
+    return {"verified": ok, "message": message, "generation_id": m["generation_id"], "format": m["format"],
+            "unsigned_development": not m.get("production_acceptable", False), "tile_count": 32,
+            "bounds": {"west": w, "south": s, "east": e_, "north": n},
+            "source_images": ["TX003_2016_NAIP", "TX003_2017_NOAA"]}
+
+
 @app.get("/config")
 def public_config():
     """Browser-safe settings. Only a Mapbox *public* token (pk.*) is ever returned; a secret

@@ -22,6 +22,7 @@
     base,
     health: () => req('/health'),
     config: () => req('/config'),
+    generation: () => req('/generation'),
     images: (q = {}) => req('/images?' + qs(q)),
     async allImages() {
       const out = []; let offset = 0, total = Infinity;

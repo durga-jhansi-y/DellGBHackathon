@@ -1,0 +1,5 @@
+# Test fixtures are hashed byte-for-byte: never let Git convert line endings.
+testdata/** binary
+*.sqlite binary
+*.bin binary
+*.png binary

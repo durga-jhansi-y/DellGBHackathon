@@ -31,6 +31,8 @@
     patchSetPage();
     patchNetwork();
     setPage(currentView);
+    try { S.pkg = await API.generation(); if (S.pkg.verified && map.addPackage) map.addPackage(S.pkg); } catch (e) { S.pkg = null; }
+    renderInfoPanel();
   }
 
   function applyCopy() {
@@ -264,6 +266,11 @@
       if (!pts.length || !m) return;
       m.fitBounds(L.latLngBounds(pts.flatMap((p) => [[p.s, p.w], [p.n, p.e]])), { padding: [30, 30], maxZoom: 16 });
     }
+    function addPackage(g) {   // outline of the verified offline package (Shruthi's pipeline)
+      const b = g.bounds;
+      L.rectangle([[b.south, b.west], [b.north, b.east]], { color: '#7fd1ff', weight: 2, dashArray: '6 4', fill: false })
+        .bindTooltip(`<strong>Verified offline package</strong><br>${esc(g.generation_id)} · ${esc(g.tile_count)} tiles · unsigned (dev)`, { sticky: true }).addTo(m);
+    }
     function clearOverlay() { if (overlay) { m.removeLayer(overlay); overlay = null; } }
     function showOverlay(img) {
       clearOverlay(); if (!m || img.west == null) return;
@@ -272,7 +279,7 @@
       const w = q('#map-stage').clientWidth;
       m.fitBounds(b, { paddingTopLeft: [30, 60], paddingBottomRight: [Math.min(520, w * 0.58) + 30, 30], maxZoom: 18 });
     }
-    return { mount, draw, fit, resize: () => m && m.invalidateSize(), fitAll: () => fit(S.points), centerZoom: (f) => (f > 1 ? m.zoomIn() : m.zoomOut()), showOverlay, clearOverlay, toggleBase, setOnline };
+    return { mount, draw, fit, resize: () => m && m.invalidateSize(), fitAll: () => fit(S.points), centerZoom: (f) => (f > 1 ? m.zoomIn() : m.zoomOut()), showOverlay, clearOverlay, toggleBase, setOnline, addPackage };
   })();
   const map = window.L ? leafletMap : canvasMap;
   const isOnline = () => document.body.dataset.networkMode === 'online';
@@ -370,6 +377,7 @@
         <div><span class="detail-label">CAPTURE</span><strong>2016 – 2025</strong></div><div><span class="detail-label">SOURCES</span><strong>NOAA · USDA · USCG</strong></div></div>
       <div class="panel-rule"></div><div class="panel-section-title">INTEGRITY CHECK <span class="freshness">On open</span></div>
       <div class="integrity-row"><span class="integrity-icon">✓</span><span><strong>SHA-256 per image</strong><small>Checked against the published hash before display</small></span><span class="integrity-check">✓</span></div>
+      ${S.pkg ? `<div class="integrity-row"><span class="integrity-icon">${S.pkg.verified ? '✓' : '!'}</span><span><strong>Offline package ${esc(S.pkg.generation_id || '')}</strong><small>${S.pkg.verified ? `Verified now · ${esc(S.pkg.tile_count)} tiles (before/after) · hashes checked` : 'Verification FAILED'}</small></span>${S.pkg.verified ? '<span class="integrity-check">✓</span>' : ''}</div>` : ''}
       <div class="integrity-row"><span class="integrity-icon">!</span><span><strong>Publisher signature</strong><small>Not signed · development data</small></span></div>
       <div class="assurance-note"><span>ⓘ</span><p>Verification confirms the file matches what was published. It doesn’t guarantee imagery is current or reflects real-world conditions.</p></div>
       <button class="panel-link" id="provenance-button">View source &amp; provenance <span>↗</span></button>`;
