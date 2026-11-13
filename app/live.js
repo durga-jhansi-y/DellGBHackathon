@@ -243,13 +243,9 @@
       m.addLayer(layers[key].layer); current = key;
       if (notify) showToast(`Basemap: ${layers[key].name}`);
     }
-    const toggleBase = () => { if (!online) { showToast('The basemap needs Online mode'); return; } setBase(order[(order.indexOf(current) + 1) % order.length]); };
-    // Online mode loads basemap tiles from the network; Offline mode shows only installed imagery.
-    function setOnline(on) {
-      online = on; if (!m || !m._loaded) return;   // before the first view is set, mount() applies the state
-      Object.values(layers).forEach((l) => m.removeLayer(l.layer));
-      if (on && current) m.addLayer(layers[current].layer);
-    }
+    const toggleBase = () => setBase(order[(order.indexOf(current) + 1) % order.length]);
+    // The basemap works in both modes (it is not tied to Online/Offline); the switch only gates AI.
+    function setOnline(on) { online = on; }
     const syncFootprints = () => { if (m.getZoom() >= 14 && S.showFootprints) m.addLayer(footprints); else m.removeLayer(footprints); };
 
     function draw() {
@@ -315,7 +311,6 @@
             <div><span>Event</span><strong>${esc(detail.event_name || '—')}</strong></div>
             <div><span>Resolution</span><strong>${detail.native_resolution_min_m != null ? esc(detail.native_resolution_min_m) + ' m' : '—'}</strong></div>
             <div><span>Bounds (W,S,E,N)</span><strong>${fmt(after.west)}, ${fmt(after.south)}, ${fmt(after.east)}, ${fmt(after.north)}</strong></div>
-            <div><span>SHA-256 (after)</span><strong style="font-family:monospace">${esc(String(after.sha256 || '').slice(0, 16))}…</strong></div>
           </div>
           <div class="lv-ai">
             ${paired ? '<button id="lv-change">Compare before / after with Qwen</button>' : ''}
@@ -351,7 +346,7 @@
       imgs.forEach((im) => { const mark = (good) => { done++; if (good) ok++; finish(); }; if (im.complete && im.naturalWidth) mark(true); else { im.addEventListener('load', () => mark(true)); im.addEventListener('error', () => mark(false)); } });
     }
 
-    const note = '<div class="lv-hist" style="margin-top:6px">Model-generated, not human-reviewed. Any confidence value is the model’s own estimate, not a measured accuracy.</div>';
+    const note = '';
     const renderChange = (r) => {
       const x = r.result || {};
       if (x.raw) return `<div class="lv-result"><span class="tag">MODEL-GENERATED · UNREVIEWED</span><div>${esc(x.raw)}</div>${note}</div>`;
@@ -398,7 +393,7 @@
     window.setNetworkMode = function (mode, notify) {
       base(mode, false);   // original handles the button state; its "not connected" toast is replaced below
       applyNetworkUI();
-      if (notify) showToast(mode === 'online' ? 'Online mode · basemap tiles and AI are connected' : 'Offline mode · installed imagery only (no basemap, no AI)');
+      if (notify) showToast(mode === 'online' ? 'Online mode · AI is connected' : 'Offline mode · AI is paused; map and installed imagery keep working');
     };
     let saved = null; try { saved = localStorage.getItem('crystalGeoNetworkMode'); } catch (e) { /* storage blocked */ }
     window.setNetworkMode(saved || 'online');   // services are live: default to Online unless the user chose Offline
