@@ -1,0 +1,1 @@
+.local-mode{border:1px solid transparent;background:transparent;padding:7px 9px;border-radius:5px;font:10px var(--mono);cursor:pointer;transition:background .15s,border-color .15s}.local-mode:hover,.local-mode:focus-visible{background:#202d26;border-color:#35443a;outline:none}.local-mode.online i{background:#73d6b3;box-shadow:0 0 0 3px #73d6b320}.local-mode.online{color:#b8dccd}

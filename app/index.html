@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f6f7f4">
+  <title>Crystal Geo — Offline field map</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="network-mode.css">
+  <link rel="stylesheet" href="map-controls.css">
+  <style>.first-run-dialog{width:min(480px,calc(100vw - 30px));padding:28px 32px 21px;border:1px solid #e4e9e1;border-radius:12px}.first-run-mark{display:flex;align-items:center;gap:10px}.first-run-mark .brand-mark{width:20px;height:20px}.step-indicator{display:flex;align-items:center;gap:5px;margin-top:34px}.step-dot{width:6px;height:6px;border-radius:8px;background:#dce3da}.step-dot.active{width:19px;background:#638266}.step-count{margin-left:auto;color:#929b91;font:9px var(--mono)}.first-run-dialog h2{font:700 24px/1.2 var(--display);letter-spacing:-.8px;color:#29362b;margin:19px 0 9px}.first-run-dialog>p{font-size:11px;line-height:1.65;color:#7d887d;margin:0}.welcome-illustration{height:126px;margin:19px 0 16px;border-radius:7px;position:relative;overflow:hidden;background:linear-gradient(145deg,#e8ecdd,#d3e1d5 52%,#d5e0dc)}.welcome-contour{position:absolute;inset:20px 67px;border:1px solid #8ca78a77;border-radius:48%;transform:rotate(-19deg)}.welcome-contour.c2{inset:30px 82px}.welcome-contour.c3{inset:40px 97px}.welcome-illustration span{position:absolute;left:12px;bottom:10px;font:8px var(--mono);letter-spacing:.08em;color:#66786a}.welcome-illustration b{position:absolute;right:38%;top:40%;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#fff;color:#56805d;box-shadow:0 0 0 7px #ffffff55}.welcome-actions{display:flex;justify-content:space-between}.welcome-footnote{border-top:1px solid #edf0eb;margin-top:17px;padding-top:12px;color:#9aa196;font-size:9px;text-align:center}.welcome-actions .button-secondary{border-color:transparent;background:none;color:#859085}</style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#map" aria-label="Crystal Geo home"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><span>crystal<span class="brand-light">geo</span></span></a>
+      <div class="workspace-label">WORKSPACE</div>
+      <nav class="main-nav" aria-label="Main navigation">
+        <button class="nav-link active" data-view="map"><span class="nav-icon map-icon">⌖</span><span>Map</span><span class="nav-dot"></span></button>
+        <button class="nav-link" data-view="datasets"><span class="nav-icon">▤</span><span>Datasets</span><span class="nav-count">2</span></button>
+        <button class="nav-link" data-view="findings"><span class="nav-icon">◇</span><span>Findings</span><span class="experimental">SOON</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="storage-card"><div class="storage-heading"><span>Local storage</span><span>64%</span></div><div class="storage-bar"><span></span></div><div class="storage-detail">12.8 GB <span>of 20 GB</span></div></div>
+        <button class="nav-link settings-link" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
+        <div class="profile"><div class="avatar">JD</div><div><strong>Jordan Davis</strong><small>Field analyst</small></div><span class="profile-more">···</span></div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar"><div class="breadcrumb"><span>Workspace</span><b>/</b><strong id="page-crumb">Map</strong></div><div class="top-actions"><button class="local-mode" id="network-mode-toggle" type="button" aria-pressed="false" title="Toggle prototype network mode"><i></i><span id="network-mode-label">Offline mode</span></button><button class="icon-button" aria-label="Notifications">♧<span class="notification-dot"></span></button><div class="top-avatar">JD</div></div></header>
+      <section class="page-heading"><div><div class="eyebrow" id="heading-eyebrow">FIELD WORKSPACE <span>·</span> NORTH CASCADES</div><h1 id="page-title">Offline map</h1><p id="page-subtitle">Your imagery, ready when the network isn’t.</p></div><div class="heading-actions"><button class="button button-secondary" id="details-button"><span>ⓘ</span> Dataset details</button><button class="button button-primary" id="sync-button"><span>↻</span> Check for updates</button></div></section>
+
+      <section class="map-layout" id="map-view">
+        <div class="map-column">
+          <div class="map-toolbar"><div class="dataset-chip"><span class="dataset-thumb">▧</span><span><strong>North Cascades</strong><small>Satellite imagery · 2024</small></span><span class="chevron">⌄</span></div><div class="toolbar-divider"></div><button class="toolbar-control active" id="imagery-toggle"><span class="control-glyph">▦</span> Imagery <span class="toggle on"></span></button><button class="toolbar-control" id="findings-toggle"><span class="control-glyph pin-glyph">◇</span> Findings <span class="toggle"></span></button><span class="toolbar-spacer"></span><button class="toolbar-icon" id="layers-button" title="Map layers">☷</button><button class="toolbar-icon" title="Fullscreen">⛶</button></div>
+          <div class="map-stage" id="map-stage" aria-label="Illustrated offline map of North Cascades">
+            <div class="map-surface">
+              <svg class="map-art" viewBox="0 0 1200 760" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Topographic map illustration with verified satellite imagery">
+                <defs>
+                  <pattern id="grid" width="92" height="92" patternUnits="userSpaceOnUse"><path d="M 92 0 L 0 0 0 92" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="1"/></pattern>
+                  <pattern id="raster" width="300" height="250" patternUnits="userSpaceOnUse"><path d="M0 0H300V250H0z" fill="none" stroke="#eff2e8" stroke-opacity=".42" stroke-width="2" stroke-dasharray="3 4"/></pattern>
+                  <filter id="soft"><feGaussianBlur stdDeviation="18"/></filter>
+                </defs>
+                <rect width="1200" height="760" fill="#d8e3d4"/>
+                <path d="M0 435 Q80 384 160 420 T310 402 Q390 380 465 418 T615 393 Q710 367 785 418 T955 402 Q1060 375 1200 414V760H0Z" fill="#c5d7c2"/>
+                <path d="M0 0H1200V190 Q1110 224 1050 194T900 205Q806 237 731 199T588 215Q496 237 425 193T271 214Q182 240 105 197T0 223Z" fill="#e2e6d7"/>
+                <g fill="#b8cdb6" opacity=".8"><path d="M0 74l82-43 51 35 77-24 52 34-43 43-103 15-62-20z"/><path d="M713 18l82 9 46 40-33 47-77-11-41-42z"/><path d="M934 135l75-28 73 40-9 48-78 19-63-35z"/><path d="M68 487l80-34 94 34-28 70-98 16-54-38z"/><path d="M825 483l72-47 91 21 52 64-63 41-110-20z"/></g>
+                <g fill="#abc4ad" opacity=".94"><path d="M198-10 356 18l114 74-49 70-113 15-94-43-72-87z"/><path d="m536 37 132-50 122 47-18 93-109 55-120-41-58-48z"/><path d="m832 230 102-67 106 27 84 78-41 84-124-3-96-49z"/><path d="m371 324 91-47 88 26 70 70-38 67-124 3-83-53z"/></g>
+                <g fill="#7c9d87" opacity=".34"><path d="m206 58 140 10 76 51-75 27-110-18-66-39z"/><path d="m540 60 120-35 86 31-36 69-92 31-85-50z"/><path d="m850 246 90-51 88 25 56 46-47 43-104-4-61-34z"/><path d="m391 341 74-37 84 42-14 66-104 7-61-42z"/></g>
+                <g fill="none" stroke="#9aaf91" stroke-width="2" opacity=".58"><path d="M-20 295q130-65 223-17t185-10q90-56 178-9t178 0q120-50 234 3t250-16"/><path d="M-40 322q138-65 228-16t180-10q92-57 182-9t175 0q125-51 238 4t260-16"/><path d="M-32 590q115-54 213-9t173-1q111-53 202-3t196-8q113-49 237 7t248-15"/><path d="M-32 618q116-54 214-9t173-1q111-53 202-3t196-8q113-49 237 7t248-15"/></g>
+                <path d="M-20 541C154 476 182 343 357 365s203 177 360 116 211-213 515-132" fill="none" stroke="#8bb7b4" stroke-width="42" opacity=".85"/><path d="M-20 541C154 476 182 343 357 365s203 177 360 116 211-213 515-132" fill="none" stroke="#e5eee5" stroke-width="3" opacity=".85"/>
+                <path d="M12 251C144 296 226 249 327 278s155 84 252 50 132-86 232-51 168 53 397 19M75 708c106-106 190-138 285-116s179 88 268 49 175-155 272-110 149 58 263 39" fill="none" stroke="#f6f1d9" stroke-width="8" opacity=".9"/><path d="M12 251C144 296 226 249 327 278s155 84 252 50 132-86 232-51 168 53 397 19M75 708c106-106 190-138 285-116s179 88 268 49 175-155 272-110 149 58 263 39" fill="none" stroke="#d6b779" stroke-width="2" opacity=".85"/>
+                <path d="M273 0q70 142 7 273t11 236q39 142 8 251M668-20q-45 144 9 247t-14 189q-37 106 10 199t-3 177M1000-20q-54 132-15 254t-9 200q-44 148 5 324" fill="none" stroke="#f6f1d9" stroke-width="5" opacity=".8"/>
+                <g class="peak" fill="#607e6f"><path d="m175 169 47-100 55 103-42-21-29 33z"/><path d="m412 174 63-119 67 127-56-37-32 51z"/><path d="m706 151 48-96 57 101-40-26-29 38z"/><path d="m971 396 57-110 61 120-52-29-27 43z"/><path d="m115 393 46-90 56 100-44-22-30 40z"/></g>
+                <g fill="#526e60" font-family="DM Sans, sans-serif" font-size="14" font-weight="600" opacity=".82"><text x="132" y="244">SAHALE ARM</text><text x="793" y="260">NORTH CASCADES</text><text x="396" y="551">ROSS LAKE</text><text x="954" y="577">PASAYTEN WILDERNESS</text><text x="78" y="650">SKAGIT RIVER</text><text x="574" y="179">MT. SHUKSAN</text></g>
+                <g fill="#748c7e"><circle cx="309" cy="282" r="4"/><circle cx="493" cy="394" r="4"/><circle cx="782" cy="311" r="4"/><circle cx="914" cy="455" r="4"/></g>
+                <rect width="1200" height="760" fill="url(#grid)"/><rect width="1200" height="760" fill="url(#raster)"/>
+              </svg>
+              <div class="map-coord coord-top">48° 42′ 18.4″ N</div><div class="map-coord coord-bottom">121° 07′ 52.1″ W</div>
+              <div class="map-pin trailhead-pin"><span class="pin-pulse"></span><span class="pin-center">⌖</span><div class="pin-label"><strong>Maple Pass</strong><small>Trailhead · 1,860 m</small></div></div>
+              <div class="map-pin finding-pin"><span class="finding-ring"></span><span class="finding-center">◇</span><div class="finding-label"><strong>Review finding</strong><small>Confidence 0.87</small></div></div>
+              <div class="map-center-cross">+</div>
+              <div class="map-watermark">CRYSTAL GEO <span>·</span> OFFLINE BASEMAP</div>
+            </div>
+            <div class="map-status-legend" aria-label="Tile verification legend">
+              <div class="legend-heading">TILE STATUS <button id="map-info" aria-label="About tile status" title="About tile status">ⓘ</button></div>
+              <span><i class="legend-dot verified"></i>Verified</span>
+              <span><i class="legend-dot unverified"></i>Unverified</span>
+              <span><i class="legend-dot failed"></i>Verification failed</span>
+            </div>
+            <div class="map-filter-bar" role="group" aria-label="Filter map tiles by status">
+              <button class="map-filter active" data-filter="all" aria-pressed="true">All tiles</button>
+              <button class="map-filter" data-filter="verified" aria-pressed="false">Verified</button>
+              <button class="map-filter" data-filter="unverified" aria-pressed="false">Unverified</button>
+              <button class="map-filter" data-filter="failed" aria-pressed="false">Failed</button>
+            </div>
+            <button class="select-area-button" id="select-area"><span>⌖</span> Select area</button>
+            <div class="map-zoom"><button aria-label="Zoom in" id="zoom-in">+</button><button aria-label="Zoom out" id="zoom-out">−</button><span></span><button aria-label="Recenter map" id="recenter">◎</button></div>
+            <button class="location-button" id="locate-button"><span>⊙</span> My location</button>
+            <div class="map-attribution">Imagery © USGS · USFS <span>·</span> Capture: Aug 2024</div>
+            <div class="scale-control"><div class="scale-line"></div><span id="scale-label">2 km</span></div>
+            <div class="map-status"><span class="status-check">✓</span><span><strong>Verified imagery</strong><small>All visible tiles checked</small></span><button title="Verification details" id="verify-info">ⓘ</button></div>
+          </div>
+          <div class="map-footer"><div class="footer-left"><span class="online-indicator"></span> All map data available offline <span class="footer-separator">·</span> Last verified Nov 12, 2026</div><button id="download-area">＋ Download an area</button></div>
+        </div>
+        <aside class="info-panel">
+          <div class="panel-header"><span class="panel-eyebrow">ACTIVE DATASET</span><span class="verified-pill"><span>✓</span> Verified</span></div>
+          <h2>North Cascades<br>National Park</h2><p class="panel-intro">Satellite imagery for offline field work.</p>
+          <div class="coverage-preview"><div class="coverage-shape"></div><span class="coverage-label">WASHINGTON, US</span><span class="coverage-pin">●</span><div class="coverage-legend"><i></i>Downloaded coverage</div></div>
+          <div class="detail-grid"><div><span class="detail-label">CAPTURE DATE</span><strong>Aug 14 – 28, 2024</strong></div><div><span class="detail-label">GENERATION</span><strong class="mono">NCNP-2024.08.2</strong></div><div><span class="detail-label">PUBLISHER</span><strong>USGS Earth Explorer <span class="trusted-dot">✓</span></strong></div><div><span class="detail-label">PACKAGE SIZE</span><strong>2.4 GB <span class="detail-muted">· 186 tiles</span></strong></div></div>
+          <div class="panel-rule"></div><div class="panel-section-title">INTEGRITY CHECK <span class="freshness">Just now</span></div><div class="integrity-row"><span class="integrity-icon">✓</span><span><strong>Signature verified</strong><small>Trusted publisher key · Ed25519</small></span><span class="integrity-check">✓</span></div><div class="integrity-row"><span class="integrity-icon">✓</span><span><strong>Tile integrity</strong><small>1,248 of 1,248 tiles checked</small></span><span class="integrity-check">✓</span></div>
+          <div class="assurance-note"><span>ⓘ</span><p>Verification confirms origin and integrity. It doesn’t guarantee imagery is current or reflects real-world conditions.</p></div>
+          <button class="panel-link" id="provenance-button">View source &amp; provenance <span>↗</span></button>
+        </aside>
+      </section>
+      <section class="secondary-view hidden" id="secondary-view"></section>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status"></div>
+  <dialog id="modal"><div class="modal-head"><span class="eyebrow">CRYSTAL GEO</span><button class="modal-close" id="modal-close" aria-label="Close">×</button></div><h2 id="modal-title">Dataset details</h2><div id="modal-content"></div><button class="button button-primary modal-done" id="modal-done">Done</button></dialog>
+  <dialog id="first-run" class="first-run-dialog"><div class="first-run-mark"><span class="brand-mark"><i></i><i></i><i></i><i></i></span><span class="eyebrow">FIELD READY, OFFLINE</span></div><div class="step-indicator"><span class="step-dot active"></span><span class="step-dot"></span><span class="step-dot"></span><span class="step-count">1 / 3</span></div><h2 id="welcome-title">Maps for the moments<br>you lose connection.</h2><p id="welcome-copy">Crystal Geo keeps trusted imagery available in the field. Download a map area before you head out.</p><div class="welcome-illustration"><div class="welcome-contour c1"></div><div class="welcome-contour c2"></div><div class="welcome-contour c3"></div><span>OFFLINE MAP PACKAGE</span><b>✓</b></div><div class="welcome-actions"><button class="button button-secondary" id="welcome-skip">Skip for now</button><button class="button button-primary" id="welcome-next">Continue <span>→</span></button></div><div class="welcome-footnote">No location permission is needed to browse offline maps.</div></dialog>
+  <script src="repositories.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
