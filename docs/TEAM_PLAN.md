@@ -10,7 +10,7 @@ this document says *who* builds it, *in what order*, and *how the pieces connect
 | **B. Frontend** | Greatness | `app/` | Flutter UI for Map, Datasets, Findings, Settings |
 | **C. Compression + Continuous Recognition** | Shruthi | `crates/`, `recognition/`, `schemas/manifest.cddl`, `schemas/index.sql`, `testdata/`, `docs/format-specification.md`, `docs/threat-model.md` | Rust packaging, signing, verification, tile reads, benchmarks, and the continuous image-recognition pipeline |
 
-Branches: each person works on their own branch (`Durga`, plus the other two).
+Branches: each person works on their own branch .
 Open PRs into `main`. Never push directly to `main`. Touch another track's
 folder only through a PR that its owner reviews.
 
