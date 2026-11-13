@@ -12,6 +12,10 @@ packages and returns verified compressed tiles and bounded decoded pixels.
 CI checks both implementations and their byte/pixel parity.
 An [experimental recognition queue](docs/recognition.md) connects pinned Rust
 tile reads to the GB10's local VLM, with cancellation and saved provenance.
+The [compression evaluation runner](docs/compression-evaluation.md) builds raw
+and lossless WebP controls, compares byte-matched MBTiles, and exports size,
+latency, memory and reproducibility reports. A [measured GB10 run](docs/benchmarks/tx003-gb10/report.md)
+is preserved with its protocol and samples.
 It uses an **unsigned development manifest that must never be accepted in
 production**, and is for development and noncommercial demonstration only.
 The remaining architecture below is still proposed.
