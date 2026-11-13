@@ -25,7 +25,8 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -190,3 +191,12 @@ def list_findings(image_id: str | None = None, limit: int = Query(50, ge=1, le=5
         r["reviewed_by_human"] = bool(r["reviewed_by_human"])
         r["settings"] = json.loads(r.pop("settings_json") or "null")
     return {"items": rows}
+
+
+# Serve the web UI from the same origin as the API: http://localhost:8000/app/
+if (ROOT / "app").is_dir():
+    app.mount("/app", StaticFiles(directory=ROOT / "app", html=True), name="app")
+
+    @app.get("/", include_in_schema=False)
+    def root():
+        return RedirectResponse("/app/")
