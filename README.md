@@ -3,6 +3,12 @@
 Proposed architecture for secure offline imagery retrieval, map rendering,
 and local recognition. Capabilities require implementation and validation.
 
+The first Python development slice now builds and verifies the TX003 offline
+before/after fixture. See [fixture usage and limitations](docs/fixture-usage.md).
+It uses an **unsigned development manifest that must never be accepted in
+production**, and is for development and noncommercial demonstration only.
+The remaining architecture below is still proposed.
+
 ```mermaid
 flowchart TD
     Sources["Imagery sources"]
